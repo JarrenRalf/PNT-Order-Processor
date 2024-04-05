@@ -441,18 +441,21 @@ function getExportData()
         range = itemSearchSheet.getRange(4, 3, numRows, 7);
         deliveryInstructions = itemSearchSheet.getSheetValues(2, 9, 1, 1)[0][0];
 
-        if (isNotBlank(deliveryInstructions)) // If there are delivery instructions, make them the fist comment lines on the order
-          exportData_WithDiscountedPrices.push(...deliveryInstructions.match(/.{1,75}/g).map(c => ['I', c, '', ''])); // If necessary, make multiple comment lines if comments are > 75 characters long
+        /* If there are delivery instructions, make them the final line of the order.
+         * If necessary, make multiple comment lines if comments are > 75 characters long.
+         */
+        exportData.push(...range.getValues(), // The SKUs and quantities
+          ['I', 'Provide your preferred delivery / pick up date and location below:', '', ''],
+          ...(isNotBlank(deliveryInstructions)) ? deliveryInstructions.match(/.{1,75}/g).map(c => ['I', c, '', '']) : [['I', '**Customer left this field blank**', '', '']]);
 
-        exportData.push(...range.getValues());
-        range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
-          .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
-          .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
-          .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
-          .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
-          .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
-          .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
-          .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
+        // range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
+        //   .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
+        //   .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
+        //   .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
+        //   .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
+        //   .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
+        //   .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
+        //   .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
 
         spreadsheet.toast(customer[1] + '\'s spreadsheet has been reset.')
       }
@@ -463,46 +466,223 @@ function getExportData()
     const BASE_PRICE = 1, LODGE_PRICE = 3, WHOLESALE_PRICE = 4;
 
     exportData.map(item => {
-      if (item[0] !== 'H') // Detail or Comment line
+      if (item[0] === 'H')
       {
-        if (item[0] !== 'C') // Detail line
+        isQCL = (item[1] === 'DL1015') ? true : false;
+        exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
+      }
+      else if (item[0] === 'I')
+        exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
+      else if (item[0] === 'D')
+      {
+        item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
+
+        if (isNotBlank(item[1])) // SKU is not blank
         {
-          item[1] = item[1].toString().trim().toUpperCase();
-        
-          if (isNotBlank(item[1])) // SKU is not blank
+          if (isNotBlank(item[3])) // Order quantity is not blank
           {
-            item[3] = (Number(item[3]).toString() !== 'NaN') ? Number(item[3]).toString() : 0;
-            itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1])
+            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
 
-            if (itemPricing != undefined && itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-              item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2);
+              if (itemPricing == undefined) // SKU is assumed to be invalid
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, item[3]], 
+                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              else // SKU is assumed to be valid
+              {
+                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
+              }
+            }
+            else // Order quantity is not a valid number
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+              if (itemPricing == undefined) // SKU is assumed to be invalid
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              else // SKU is assumed to be valid
+              {
+                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                exportData_WithDiscountedPrices.push(
+                  ['D', item[1], item[2], 0], 
+                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', '']
+                )
+              }
+            }
           }
-          else if (isNotBlank(item[3])) // Order quantity is not blank
-            exportData_WithDiscountedPrices.push(['D', 'MISCITEM', 0, item[3]], ...item[5].toString().match(/.{1,75}/g).map(c => ['C', c, '', '']))
-          else if (isNotBlank(item[5])) // Order quantity IS blank but the description is not
-            exportData_WithDiscountedPrices.push(...item[5].toString().match(/.{1,75}/g).map(c => ['C', c, '', '']))
-        }
-      }
-      else if (item[1] === 'DL1015') // Header line: This is QCL, they get wholesale pricing on everything
-        isQCL = false;
-      else // Header line: ** Not QCL
-        isQCL = false;
+          else // The order quantity is blank (while SKU is not)
+          {
+            itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
 
-      if (isNotBlank(item[1])) // SKU is not blank
-      {
-        if (item[0] === 'D')   // Detail Line
-        {
-          if (itemPricing != undefined) // Assuming that this is a way of check that this is a valid SKU
-            exportData_WithDiscountedPrices.push([item[0], item[1], item[2], item[3]])
-          else // Assuming SKU is invalid
-            exportData_WithDiscountedPrices.push([item[0], 'MISCITEM', item[2], item[3]], ['C', 'SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4], '', ''])
+            if (itemPricing == undefined) // SKU is assumed to be invalid
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, 0], 
+                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            else // SKU is assumed to be valid
+            {
+              if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+              exportData_WithDiscountedPrices.push(
+                ['D', item[1], item[2], 0],
+                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
+              )
+            }
+          }
         }
-        else // Header Line
-          exportData_WithDiscountedPrices.unshift([item[0], item[1], item[2], item[3]]) // Put the Header line at the very top
+        else // The SKU is blank
+        {
+          if (isNotBlank(item[3])) // Order quantity is not blank
+          {
+            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+            {
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, item[3]], 
+                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            }
+            else // Order quantity is not a valid number
+            {
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, 0], 
+                ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            }
+          }
+          else // The order quantity is blank 
+          {
+            if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
+            {
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, 0], 
+                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            }
+          }
+        }
+
+        if (isNotBlank(item[6])) // There are notes for the current line
+          exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
       }
-        
-      if (isNotBlank(item[6]) && item[6] != null) // If the Comments aren't blank
-        exportData_WithDiscountedPrices.push(...item[6].match(/.{1,75}/g).map(c => ['C', c, '', ''])); // If necessary, make multiple comment line if comments are > 75 characters long
+      else // There was no line indicator
+      {
+        item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
+
+        if (isNotBlank(item[1])) // SKU is not blank
+        {
+          if (isNotBlank(item[3])) // Order quantity is not blank
+          {
+            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+              if (itemPricing == undefined) // SKU is assumed to be invalid
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, item[3]], 
+                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              else // SKU is assumed to be valid
+              {
+                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
+              }
+            }
+            else // Order quantity is not a valid number
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+              if (itemPricing == undefined) // SKU is assumed to be invalid
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              else // SKU is assumed to be valid
+              {
+                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                exportData_WithDiscountedPrices.push(
+                  ['D', item[1], item[2], 0], 
+                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', '']
+                )
+              }
+            }
+          }
+          else // The order quantity is blank (while SKU is not)
+          {
+            itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+            if (itemPricing == undefined) // SKU is assumed to be invalid
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, 0], 
+                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            else // SKU is assumed to be valid
+            {
+              if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+              exportData_WithDiscountedPrices.push(
+                ['D', item[1], item[2], 0],
+                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
+              )
+            }
+          }
+        }
+        else // The SKU is blank
+        {
+          if (isNotBlank(item[3])) // Order quantity is not blank
+          {
+            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+            {
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, item[3]], 
+                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            }
+            else // Order quantity is not a valid number
+            {
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, 0], 
+                ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            }
+          }
+          else // The order quantity is blank 
+          {
+            if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
+            {
+              exportData_WithDiscountedPrices.push(
+                ['D', 'MISCITEM', 0, 0], 
+                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+              )
+            }
+          }
+        }
+
+        if (isNotBlank(item[6])) // There are notes for the current line
+          exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
+      }
     })
 
     const exportSheet = spreadsheet.getSheetByName('Export').clear();
