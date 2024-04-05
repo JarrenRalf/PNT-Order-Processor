@@ -13,13 +13,21 @@ function installedOnEdit(e)
   const value = e.value;
   const sheetName = spreadsheet.getActiveSheet().getSheetName();
 
-  if (sheetName === 'Dashboard' && row > 1)
-    if (col === 2) // Changing or adding a customer's name
-      updateCustomerName(range, value, spreadsheet);
-    else if (col === 6) // Changing or adding a customer's email
-      updateSharedStatusOfCustomerSS(range);
-  else if (sheetName === 'Export' && col === 3) // The user may be editting the pricing
-    updatePrice(e, range, value)
+  try
+  {
+    if (sheetName === 'Dashboard' && row > 1)
+      if (col === 2) // Changing or adding a customer's name
+        updateCustomerName(range, value, spreadsheet);
+      else if (col === 6) // Changing or adding a customer's email
+        updateSharedStatusOfCustomerSS(range);
+    else if (sheetName === 'Export' && col === 3) // The user may be editting the pricing
+      updatePrice(e, range, value)
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    throw new Error(error);
+  }
 }
 
 /**
@@ -30,22 +38,30 @@ function installedOnEdit(e)
  */
 function onChange(e)
 {
-  if (e.changeType === 'OTHER')
+  try
   {
-    const today = new Date().getTime();
-    const dashboard = e.source.getSheetByName('Dashboard')
-    
-    const customerInfo = dashboard.getSheetValues(2, 2, dashboard.getLastRow() - 1, 4).map(date => {
-      date[2] = (Number(date[2]) !== 0) ? Math.abs(Number(date[2]) - today) < 5000 : '';
-      return date;
-    });
+    if (e.changeType === 'OTHER')
+    {
+      const today = new Date().getTime();
+      const dashboard = e.source.getSheetByName('Dashboard')
+      
+      const customerInfo = dashboard.getSheetValues(2, 2, dashboard.getLastRow() - 1, 4).map(date => {
+        date[2] = (Number(date[2]) !== 0) ? Math.abs(Number(date[2]) - today) < 5000 : '';
+        return date;
+      });
 
-    for (var i = 0; i < customerInfo.length; i++)
-      if (customerInfo[i][2]) // Check if the change has been made in the last 5 seconds
-        if (dashboard.getRange(i + 2, 3).isChecked())
-          sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]);
-        else
-          sendCancelationEmail(customerInfo[i][0], customerInfo[i][3]);
+      for (var i = 0; i < customerInfo.length; i++)
+        if (customerInfo[i][2]) // Check if the change has been made in the last 5 seconds
+          if (dashboard.getRange(i + 2, 3).isChecked())
+            sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]);
+          else
+            sendCancelationEmail(customerInfo[i][0], customerInfo[i][3]);
+    }
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    throw new Error(error);
   }
 }
 
@@ -55,15 +71,16 @@ function onChange(e)
 function onOpen()
 {
   SpreadsheetApp.getUi().createMenu('PNT Menu')
-    .addItem('Create Spreadsheets for Selected Customers', 'createSSforSelectedCustomers')
-    .addItem('Email (and Share) Spreadsheets with Selected Customers', 'emailAndShareSpreadsheetsWithSelectedUsers')
-    .addItem('Share Spreadsheets with Selected Customers', 'shareSpreadsheetsWithSelectedUsers')
+      .addItem('Create Spreadsheets for Selected Customers', 'createSSforSelectedCustomers')
+      .addItem('Email (and Share) Spreadsheets with Selected Customers', 'emailAndShareSpreadsheetsWithSelectedUsers')
+      .addItem('Share Spreadsheets with Selected Customers', 'shareSpreadsheetsWithSelectedUsers')
     .addSeparator()
-    .addItem('Create onChange Trigger (with pntnoreply)', 'createTrigger_OnChange_ByPntNoReplyGmail')
+      .addItem('Create onChange Trigger (with pntnoreply)', 'createTrigger_OnChange_ByPntNoReplyGmail')
     .addSeparator()
-    .addItem('Convert Selected Items to Wholesale Pricing', 'convertToWholeSalePricing')
-    .addItem('Clear Export', 'clearExport')
-    .addItem('Get Export Data', 'getExportData').addToUi();
+      .addItem('Convert Selected Items to Wholesale Pricing', 'convertToWholeSalePricing')
+      .addItem('Clear Export', 'clearExport')
+      .addItem('Get Export Data', 'getExportData')
+    .addToUi();
 }
 
 /**
@@ -76,15 +93,23 @@ function clearExport()
   const spreadsheet = SpreadsheetApp.getActive();
   const exportSheet = spreadsheet.getActiveSheet();
 
-  if (exportSheet.getSheetName() !== 'Export')
+  try
   {
-    spreadsheet.getSheetByName('Export').activate();
-    Browser.msgBox('You must be on the Export sheet in order to clear it.')
+    if (exportSheet.getSheetName() !== 'Export')
+    {
+      spreadsheet.getSheetByName('Export').activate();
+      Browser.msgBox('You must be on the Export sheet in order to clear it.')
+    }
+    else
+    {
+      exportSheet.clear();
+      MailApp.sendEmail('adrian@pacificnetandtwine.com', 'The Template for Importing into OE has changed!', 'Remember to change the import template from LodgeImport to ShopifyImport next time you use it.') 
+    }
   }
-  else
+  catch (e)
   {
-    exportSheet.clear();
-    MailApp.sendEmail('adrian@pacificnetandtwine.com', 'The Template for Importing into OE has changed!', 'Remember to change the import template from LodgeImport to ShopifyImport next time you use it.') 
+    var error = e['stack'];
+    sendErrorEmail(error);
   }
 }
 
@@ -98,46 +123,54 @@ function convertToWholeSalePricing()
   const spreadsheet = SpreadsheetApp.getActive();
   const exportSheet = spreadsheet.getActiveSheet();
 
-  if (exportSheet.getSheetName() !== 'Export')
+  try
   {
-    spreadsheet.getSheetByName('Export').activate();
-    Browser.msgBox('Please select items on the Export sheet to convert to Wholesale prcing.');
-  }
-  else
-  {
-    var firstRows = [], lastRows = [], exportData = [];
-    const ranges = exportSheet.getActiveRangeList().getRanges();
-
-    ranges.map((rng, r) => {
-      firstRows.push(rng.getRow());
-      lastRows.push(rng.getLastRow());
-      exportData.push(exportSheet.getSheetValues(firstRows[r], 1, lastRows[r] - firstRows[r] + 1, 4))
-    })
-
-    if (Math.max( ...lastRows) <= exportSheet.getLastRow()) // If the user has not selected an item, alert them with an error message
-    { 
-      const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages');
-      const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
-      const BASE_PRICE = 1, WHOLESALE_PRICE = 4;
-
-      const exportData_WithWholesalePrices = exportData.map(data => 
-        data.map(item => {
-          if (item[0] !== 'H')
-          {
-            itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]);
-
-            if (itemPricing != undefined && itemPricing[BASE_PRICE] != 0 && itemPricing[WHOLESALE_PRICE] != 0)
-              item[2] = (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2);
-          }
-          
-          return item;
-        })
-      )
-
-      ranges.map((range, r) => exportSheet.getRange(range.getRow(), 1, range.getNumRows(), 4).setValues(exportData_WithWholesalePrices[r]));
+    if (exportSheet.getSheetName() !== 'Export')
+    {
+      spreadsheet.getSheetByName('Export').activate();
+      Browser.msgBox('Please select items on the Export sheet to convert to Wholesale prcing.');
     }
     else
-      SpreadsheetApp.getUi().alert('Please select an items from the list only.');
+    {
+      var firstRows = [], lastRows = [], exportData = [];
+      const ranges = exportSheet.getActiveRangeList().getRanges();
+
+      ranges.map((rng, r) => {
+        firstRows.push(rng.getRow());
+        lastRows.push(rng.getLastRow());
+        exportData.push(exportSheet.getSheetValues(firstRows[r], 1, lastRows[r] - firstRows[r] + 1, 4))
+      })
+
+      if (Math.max( ...lastRows) <= exportSheet.getLastRow()) // If the user has not selected an item, alert them with an error message
+      { 
+        const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages');
+        const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
+        const BASE_PRICE = 1, WHOLESALE_PRICE = 4;
+
+        const exportData_WithWholesalePrices = exportData.map(data => 
+          data.map(item => {
+            if (item[0] !== 'H')
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]);
+
+              if (itemPricing != undefined && itemPricing[BASE_PRICE] != 0 && itemPricing[WHOLESALE_PRICE] != 0)
+                item[2] = (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2);
+            }
+            
+            return item;
+          })
+        )
+
+        ranges.map((range, r) => exportSheet.getRange(range.getRow(), 1, range.getNumRows(), 4).setValues(exportData_WithWholesalePrices[r]));
+      }
+      else
+        SpreadsheetApp.getUi().alert('Please select an items from the list only.');
+    }
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    sendErrorEmail(error);
   }
 }
 
@@ -151,110 +184,118 @@ function createSSforSelectedCustomers()
   const spreadsheet = SpreadsheetApp.getActive();
   const dashboard = spreadsheet.getActiveSheet();
 
-  if (dashboard.getSheetName() !== 'Dashboard')
+  try
   {
-    spreadsheet.getSheetByName('Dashboard').activate();
-    Browser.msgBox('Please select the customers that you wish to create spreadsheets for.')
-  }
-  else
-  {
-    var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, splitDescription, sku, uom, colours = [], numRows, horizontalAligns, colourSelector = true;
-    const templateSS = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ');
-    const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
-    const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
+    if (dashboard.getSheetName() !== 'Dashboard')
+    {
+      spreadsheet.getSheetByName('Dashboard').activate();
+      Browser.msgBox('Please select the customers that you wish to create spreadsheets for.')
+    }
+    else
+    {
+      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, splitDescription, sku, uom, colours = [], numRows, horizontalAligns, colourSelector = true;
+      const templateSS = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ');
+      const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
+      const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
 
-    const invoiceData = invoiceDataSheet.getSheetValues(2, 1, invoiceDataSheet.getLastRow() - 1, 8).map(item => {
-      item[4] = (item[4] === '100') ? 'Richmond' : (item[4] === '200') ? 'Parksville' : 'Prince Rupert'; // Convert 100, 200, and 300 location codes to the appropriate names for the customers
-      splitDescription = item[0].split(' - ');
-      sku = splitDescription.pop();
-      uom = splitDescription.pop();
-      splitDescription.pop();
-      splitDescription.push(uom, sku);
-      item[0] = splitDescription.join(' - ');
+      const invoiceData = invoiceDataSheet.getSheetValues(2, 1, invoiceDataSheet.getLastRow() - 1, 8).map(item => {
+        item[4] = (item[4] === '100') ? 'Richmond' : (item[4] === '200') ? 'Parksville' : 'Prince Rupert'; // Convert 100, 200, and 300 location codes to the appropriate names for the customers
+        splitDescription = item[0].split(' - ');
+        sku = splitDescription.pop();
+        uom = splitDescription.pop();
+        splitDescription.pop();
+        splitDescription.push(uom, sku);
+        item[0] = splitDescription.join(' - ');
 
-      return item;
-    })
-
-    invoiceData.shift() // Remove the header
-
-    const customerListSheet = lodgeSalesSS.getSheetByName('Customer List');
-    const customerList = customerListSheet.getSheetValues(3, 1, customerListSheet.getLastRow() - 2, 3);
-    const numYears = new Date().getFullYear() - 2011;
-    const CUST_NAME = 0, SALES_TOTAL = 2;
-    const white = ['white', 'white', 'white', 'white', 'white', 'white', 'white', 'white'], blue = ['#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8'];
-
-    dashboard.getActiveRangeList().getRanges().map(rng => {
-      rng.offset(0, 1 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((customer, i) => {
-        if (isNotBlank(customer[0]) && isNotBlank(customer[1]) && isBlank(customer[4])) // Both customer # and name are not blank, and the spreadsheet URL is blank
-        {
-          ss = templateSS.copy('PNT Order Sheet - ' + customer[1]); // Create the customers spreadsheet from the template spreadsheet
-          ss.addEditor('pntnoreply@gmail.com'); // Add the pntnoreply email so that the emails can come from this account
-          ss.getSheetByName('Item Search').getRange(1, 2).setValue(customer[1]).offset(3, 2).setValue(customer[0]); // Set the customer name and customer #
-          velocityReportSheetName = customerList.find(custNum => custNum[0] === customer[0]); 
-          lodgeSalesSS.getSheetByName(velocityReportSheetName[2]).copyTo(ss); // Take the "velocity report" from the Lodge Sales spreadsheet and put it on the customer's sheet
-          velocityReportSheet = ss.getSheetByName('Copy of ' + velocityReportSheetName[2]).setName('Yearly Purchase Report');
-          chartTitleInfo = velocityReportSheet.getRange(1, 2, 1, 3).getDisplayValues()[0];
-
-          chart = velocityReportSheet.newChart()
-            .asColumnChart()
-            .addRange(velocityReportSheet.getRange(3, 5, numYears, 2))
-            .setNumHeaders(0)
-            .setXAxisTitle('Year')
-            .setYAxisTitle('Sales Total')
-            .setTransposeRowsAndColumns(false)
-            .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
-            .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_BOTH)
-            .setOption('title', chartTitleInfo[CUST_NAME])
-            .setOption('subtitle', 'Total: ' + chartTitleInfo[SALES_TOTAL])
-            .setOption('isStacked', 'false')
-            .setOption('bubble.stroke', '#000000')
-            .setOption('textStyle.color', '#000000')
-            .setOption('useFirstColumnAsDomain', true)
-            .setOption('titleTextStyle.color', '#757575')
-            .setOption('legend.textStyle.color', '#1a1a1a')
-            .setOption('subtitleTextStyle.color', '#999999')
-            .setOption('series', {0: {hasAnnotations: true, dataLabel: 'value'}})
-            .setOption('trendlines', {0: {lineWidth: 4, type: 'linear', color: '#6aa84f'}})
-            .setOption('hAxis', {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}})
-            .setOption('annotations', {domain: {textStyle: {color: '#808080'}}, total: {textStyle : {color: '#808080'}}})
-            .setOption('vAxes', {0: {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}, minorGridlines: {count: 2}}})
-            .setPosition(1, 1, 0, 0)
-            .build();
-
-          velocityReportSheet.insertChart(chart);
-          velocityReportSheet.protect();
-          chartSheet = ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
-          colours.length = 0; // Clear the background colouyrs array
-
-          customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]) // Customer invoice data
-            .map((line, i, arr) => {
-
-              if (i === 0)
-                colourSelector = true;
-              else if (line[2].toString().trim() != arr[i - 1][2].toString().trim()) // If the current invoice number does not match the current one, then switch the background colours
-                colourSelector = !colourSelector;
-
-              colours.push((colourSelector) ? white : blue);
-              
-              return line;
-            })
-
-          invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')}).showSheet()
-          numRows = customerInvoiceData.length;
-          horizontalAligns = new Array(numRows).fill(['left', 'right', 'right', 'center', 'center', 'center', 'right', 'right']);
-
-          invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
-          invoiceSheet.deleteColumn(2).protect();
-          url = ss.getUrl();
-          customer[2] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!F2\")";
-          customer[3] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!B4\")";
-          customer[4] = url;
-
-          rng.offset(i, 1 - rng.getColumn(), 1, 5).setValues([customer]);
-          return customer;
-        }
+        return item;
       })
-    })
+
+      invoiceData.shift() // Remove the header
+
+      const customerListSheet = lodgeSalesSS.getSheetByName('Customer List');
+      const customerList = customerListSheet.getSheetValues(3, 1, customerListSheet.getLastRow() - 2, 3);
+      const numYears = new Date().getFullYear() - 2011;
+      const CUST_NAME = 0, SALES_TOTAL = 2;
+      const white = ['white', 'white', 'white', 'white', 'white', 'white', 'white', 'white'], blue = ['#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8'];
+
+      dashboard.getActiveRangeList().getRanges().map(rng => {
+        rng.offset(0, 1 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((customer, i) => {
+          if (isNotBlank(customer[0]) && isNotBlank(customer[1]) && isBlank(customer[4])) // Both customer # and name are not blank, and the spreadsheet URL is blank
+          {
+            ss = templateSS.copy('PNT Order Sheet - ' + customer[1]); // Create the customers spreadsheet from the template spreadsheet
+            ss.addEditor('pntnoreply@gmail.com'); // Add the pntnoreply email so that the emails can come from this account
+            ss.getSheetByName('Item Search').getRange(1, 2).setValue(customer[1]).offset(3, 2).setValue(customer[0]); // Set the customer name and customer #
+            velocityReportSheetName = customerList.find(custNum => custNum[0] === customer[0]); 
+            lodgeSalesSS.getSheetByName(velocityReportSheetName[2]).copyTo(ss); // Take the "velocity report" from the Lodge Sales spreadsheet and put it on the customer's sheet
+            velocityReportSheet = ss.getSheetByName('Copy of ' + velocityReportSheetName[2]).setName('Yearly Purchase Report');
+            chartTitleInfo = velocityReportSheet.getRange(1, 2, 1, 3).getDisplayValues()[0];
+
+            chart = velocityReportSheet.newChart()
+              .asColumnChart()
+              .addRange(velocityReportSheet.getRange(3, 5, numYears, 2))
+              .setNumHeaders(0)
+              .setXAxisTitle('Year')
+              .setYAxisTitle('Sales Total')
+              .setTransposeRowsAndColumns(false)
+              .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
+              .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_BOTH)
+              .setOption('title', chartTitleInfo[CUST_NAME])
+              .setOption('subtitle', 'Total: ' + chartTitleInfo[SALES_TOTAL])
+              .setOption('isStacked', 'false')
+              .setOption('bubble.stroke', '#000000')
+              .setOption('textStyle.color', '#000000')
+              .setOption('useFirstColumnAsDomain', true)
+              .setOption('titleTextStyle.color', '#757575')
+              .setOption('legend.textStyle.color', '#1a1a1a')
+              .setOption('subtitleTextStyle.color', '#999999')
+              .setOption('series', {0: {hasAnnotations: true, dataLabel: 'value'}})
+              .setOption('trendlines', {0: {lineWidth: 4, type: 'linear', color: '#6aa84f'}})
+              .setOption('hAxis', {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}})
+              .setOption('annotations', {domain: {textStyle: {color: '#808080'}}, total: {textStyle : {color: '#808080'}}})
+              .setOption('vAxes', {0: {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}, minorGridlines: {count: 2}}})
+              .setPosition(1, 1, 0, 0)
+              .build();
+
+            velocityReportSheet.insertChart(chart);
+            velocityReportSheet.protect();
+            chartSheet = ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
+            colours.length = 0; // Clear the background colouyrs array
+
+            customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]) // Customer invoice data
+              .map((line, i, arr) => {
+
+                if (i === 0)
+                  colourSelector = true;
+                else if (line[2].toString().trim() != arr[i - 1][2].toString().trim()) // If the current invoice number does not match the current one, then switch the background colours
+                  colourSelector = !colourSelector;
+
+                colours.push((colourSelector) ? white : blue);
+                
+                return line;
+              })
+
+            invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')}).showSheet()
+            numRows = customerInvoiceData.length;
+            horizontalAligns = new Array(numRows).fill(['left', 'right', 'right', 'center', 'center', 'center', 'right', 'right']);
+
+            invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
+            invoiceSheet.deleteColumn(2).protect();
+            url = ss.getUrl();
+            customer[2] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!F2\")";
+            customer[3] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!B4\")";
+            customer[4] = url;
+
+            rng.offset(i, 1 - rng.getColumn(), 1, 5).setValues([customer]);
+            return customer;
+          }
+        })
+      })
+    }
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    sendErrorEmail(error);
   }
 }
 
@@ -309,24 +350,32 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
   const spreadsheet = SpreadsheetApp.getActive();
   const dashboard = spreadsheet.getActiveSheet();
 
-  if (dashboard.getSheetName() !== 'Dashboard')
+  try
   {
-    spreadsheet.getSheetByName('Dashboard').activate();
-    Browser.msgBox('Please return to the Dashboard to run this function.')
+    if (dashboard.getSheetName() !== 'Dashboard')
+    {
+      spreadsheet.getSheetByName('Dashboard').activate();
+      Browser.msgBox('Please return to the Dashboard to run this function.')
+    }
+    else
+    {
+      // dashboard.getActiveRangeList().getRanges().map(rng => {
+      //   rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
+      //       if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
+      //       {
+      //         ss = SpreadsheetApp.openByUrl(custSS[0]);
+      //         ss.addEditors(custSS[1].split(',').map(email => email.trim()));
+      //         ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()))
+      //         rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
+      //       }
+      //     })
+      // })
+    }
   }
-  else
+  catch (e)
   {
-    // dashboard.getActiveRangeList().getRanges().map(rng => {
-    //   rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
-    //       if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
-    //       {
-    //         ss = SpreadsheetApp.openByUrl(custSS[0]);
-    //         ss.addEditors(custSS[1].split(',').map(email => email.trim()));
-    //         ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()))
-    //         rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
-    //       }
-    //     })
-    // })
+    var error = e['stack'];
+    throw new Error(error);
   }
 }
 
@@ -340,70 +389,78 @@ function formatAllCustomerSpreadsheets()
 {
   const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
   const dayOfWeek = new Date().getDay();
-  var itemSearchSheet, maxRows, today, startTime;
+  var itemSearchSheet, maxRows, startTime;
 
-  dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 1).map((custSS, i) => {
+  try
+  {
+    dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 1).map((custSS, i) => {
 
-    startTime = new Date().getTime(); // Reset the function runtime
-    
-    if (i % 6 === dayOfWeek && isNotBlank(custSS[0])) // If spreadsheet URL is not blank, and use the day of the week (Sun - Sat => 0 - 6) in order to decide which spreadsheets to format
-    {
-      itemSearchSheet = SpreadsheetApp.openByUrl(custSS[0]).getSheetByName('Item Search');
-      maxRows = itemSearchSheet.getMaxRows() - 4;
+      startTime = new Date().getTime(); // Reset the function runtime
+      
+      if (i % 6 === dayOfWeek && isNotBlank(custSS[0])) // If spreadsheet URL is not blank, and use the day of the week (Sun - Sat => 0 - 6) in order to decide which spreadsheets to format
+      {
+        itemSearchSheet = SpreadsheetApp.openByUrl(custSS[0]).getSheetByName('Item Search');
+        maxRows = itemSearchSheet.getMaxRows() - 4;
 
-      itemSearchSheet.getRange(5, 1, maxRows, itemSearchSheet.getMaxColumns()).setBorder(false, false, false, false, false, false) // The full range below the header
-          .setBackgrounds(new Array(maxRows).fill(['#cccccc', '#4a86e8', '#cccccc', '#cccccc', '#cccccc', 'white', '#cccccc', 'white', 'white']))
-          .setFontColors(new Array(maxRows).fill(['#434343', '#4a86e8', '#434343', '#434343', '#434343', 'black', '#434343', 'black', 'black']))
-          .setFontFamily('Arial')
-          .setFontLine('none')
-          .setFontSize(10)
-          .setFontStyle('normal')
-          .setFontWeight('bold')
-          .setHorizontalAlignments(new Array(maxRows).fill(['left', 'center', 'center', 'center', 'center', 'center', 'center', 'left', 'left']))
-          .setNumberFormat('@')
-          .setVerticalAlignment('middle')
-          .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
-        .offset( 0, 1, maxRows, 1).setBorder(false, true, false, true, null, false, '#1155cc', SpreadsheetApp.BorderStyle.SOLID_THICK) // The vertical blue line below the header
-        .offset(-3, 4, 1, 3).setBorder(false, false, false, false, false, null) // The checkbox, timestamp, and item information display
-          .setBackground('#4a86e8')
-          .setFontColors([['white', 'white', '#ffff00']])
-          .setFontFamily('Arial')
-          .setFontLine('none')
-          .setFontSizes([[34, 11, 16]])
-          .setFontStyle('normal')
-          .setFontWeight('bold')
-          .setHorizontalAlignment('center')
-          .setNumberFormats([['#', '@', '@']])
-          .setVerticalAlignment('middle')
-          .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
-        .offset(0, 3, 1, 1).setBorder(true, true, true, true, null, null, 'black', SpreadsheetApp.BorderStyle.SOLID_THICK) // The delivery instructions
-          .setBackground('white')
-          .setFontColor('black')
-          .setFontFamily('Arial')
-          .setFontLine('none')
-          .setFontSize(11)
-          .setFontStyle('normal')
-          .setFontWeight('bold')
-          .setHorizontalAlignment('left')
-          .setNumberFormat('@')
-          .setVerticalAlignment('middle')
-          .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
-        .offset(-1, -1, 1, 1).setBorder(true, true, true, true, null, null, 'black', SpreadsheetApp.BorderStyle.SOLID_THICK) // The PO number
-          .setBackground('white')
-          .setFontColor('black')
-          .setFontFamily('Arial')
-          .setFontLine('none')
-          .setFontSize(11)
-          .setFontStyle('normal')
-          .setFontWeight('bold')
-          .setHorizontalAlignment('left')
-          .setNumberFormat('@')
-          .setVerticalAlignment('middle')
-          .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
+        itemSearchSheet.getRange(5, 1, maxRows, itemSearchSheet.getMaxColumns()).setBorder(false, false, false, false, false, false) // The full range below the header
+            .setBackgrounds(new Array(maxRows).fill(['#cccccc', '#4a86e8', '#cccccc', '#cccccc', '#cccccc', 'white', '#cccccc', 'white', 'white']))
+            .setFontColors(new Array(maxRows).fill(['#434343', '#4a86e8', '#434343', '#434343', '#434343', 'black', '#434343', 'black', 'black']))
+            .setFontFamily('Arial')
+            .setFontLine('none')
+            .setFontSize(10)
+            .setFontStyle('normal')
+            .setFontWeight('bold')
+            .setHorizontalAlignments(new Array(maxRows).fill(['left', 'center', 'center', 'center', 'center', 'center', 'center', 'left', 'left']))
+            .setNumberFormat('@')
+            .setVerticalAlignment('middle')
+            .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+          .offset( 0, 1, maxRows, 1).setBorder(false, true, false, true, null, false, '#1155cc', SpreadsheetApp.BorderStyle.SOLID_THICK) // The vertical blue line below the header
+          .offset(-3, 4, 1, 3).setBorder(false, false, false, false, false, null) // The checkbox, timestamp, and item information display
+            .setBackground('#4a86e8')
+            .setFontColors([['white', 'white', '#ffff00']])
+            .setFontFamily('Arial')
+            .setFontLine('none')
+            .setFontSizes([[34, 11, 16]])
+            .setFontStyle('normal')
+            .setFontWeight('bold')
+            .setHorizontalAlignment('center')
+            .setNumberFormats([['#', '@', '@']])
+            .setVerticalAlignment('middle')
+            .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+          .offset(0, 3, 1, 1).setBorder(true, true, true, true, null, null, 'black', SpreadsheetApp.BorderStyle.SOLID_THICK) // The delivery instructions
+            .setBackground('white')
+            .setFontColor('black')
+            .setFontFamily('Arial')
+            .setFontLine('none')
+            .setFontSize(11)
+            .setFontStyle('normal')
+            .setFontWeight('bold')
+            .setHorizontalAlignment('left')
+            .setNumberFormat('@')
+            .setVerticalAlignment('middle')
+            .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+          .offset(-1, -1, 1, 1).setBorder(true, true, true, true, null, null, 'black', SpreadsheetApp.BorderStyle.SOLID_THICK) // The PO number
+            .setBackground('white')
+            .setFontColor('black')
+            .setFontFamily('Arial')
+            .setFontLine('none')
+            .setFontSize(11)
+            .setFontStyle('normal')
+            .setFontWeight('bold')
+            .setHorizontalAlignment('left')
+            .setNumberFormat('@')
+            .setVerticalAlignment('middle')
+            .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
 
-      Logger.log(itemSearchSheet.getSheetValues(1, 2, 1, 1)[0][0] + '\'s spreadsheet has been successfully formatted in ' + (new Date().getTime() - startTime)/1000 + ' seconds.')
-    }
-  })
+        Logger.log(itemSearchSheet.getSheetValues(1, 2, 1, 1)[0][0] + '\'s spreadsheet has been successfully formatted in ' + (new Date().getTime() - startTime)/1000 + ' seconds.')
+      }
+    })
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    throw new Error(error);
+  }
 }
 
 /**
@@ -416,292 +473,300 @@ function getExportData()
   const spreadsheet = SpreadsheetApp.getActive();
   const dashboard = spreadsheet.getActiveSheet();
 
-  if (dashboard.getSheetName() !== 'Dashboard')
+  try
   {
-    spreadsheet.getSheetByName('Dashboard').activate();
-    Browser.msgBox('Please return to the Dashboard to run this function.')
+    if (dashboard.getSheetName() !== 'Dashboard')
+    {
+      spreadsheet.getSheetByName('Dashboard').activate();
+      Browser.msgBox('Please return to the Dashboard to run this function.')
+    }
+    else
+    {
+      var ss, itemSearchSheet, range, numRows, numItems, recentlyCreatedSheet, recentlyCreatedItems, deliveryInstructions, itemPricing, isQCL = false, exportData = [], exportData_WithDiscountedPrices = [];
+      const numSS = dashboard.getLastRow() - 1;
+      const dashboardRange = dashboard.getRange(2, 1, numSS, 5);
+
+      dashboardRange.getValues().map((customer, c) => {
+        if (dashboard.getRange(c + 2, 3).isChecked())
+        {
+          ss = SpreadsheetApp.openByUrl(customer[4]);
+          itemSearchSheet = ss.getSheetByName('Item Search');
+          recentlyCreatedSheet = ss.getSheetByName('Recently Created');
+          numItems = recentlyCreatedSheet.getLastRow();
+          recentlyCreatedItems = recentlyCreatedSheet.getSheetValues(1, 1, numItems, 1);
+          numRows = Math.max(getLastRowSpecial(itemSearchSheet.getSheetValues(1, 8, itemSearchSheet.getMaxRows(), 1)), // Description column
+                            getLastRowSpecial(itemSearchSheet.getSheetValues(1, 9, itemSearchSheet.getMaxRows(), 1))) // Item / General Order Notes column
+                    - 3; 
+          range = itemSearchSheet.getRange(4, 3, numRows, 7);
+          deliveryInstructions = itemSearchSheet.getSheetValues(2, 9, 1, 1)[0][0];
+
+          /* If there are delivery instructions, make them the final line of the order.
+          * If necessary, make multiple comment lines if comments are > 75 characters long.
+          */
+          exportData.push(...range.getValues(), // The SKUs and quantities
+            ['I', 'Provide your preferred delivery / pick up date and location below:', '', ''],
+            ...(isNotBlank(deliveryInstructions)) ? deliveryInstructions.match(/.{1,75}/g).map(c => ['I', c, '', '']) : [['I', '**Customer left this field blank**', '', '']]);
+
+          // range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
+          //   .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
+          //   .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
+          //   .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
+          //   .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
+          //   .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
+          //   .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
+          //   .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
+
+          spreadsheet.toast(customer[1] + '\'s spreadsheet has been reset.')
+        }
+      })
+
+      const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages')
+      const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
+      const BASE_PRICE = 1, LODGE_PRICE = 3, WHOLESALE_PRICE = 4;
+
+      exportData.map(item => {
+        if (item[0] === 'H')
+        {
+          isQCL = (item[1] === 'DL1015') ? true : false;
+          exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
+        }
+        else if (item[0] === 'I')
+          exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
+        else if (item[0] === 'D')
+        {
+          item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
+
+          if (isNotBlank(item[1])) // SKU is not blank
+          {
+            if (isNotBlank(item[3])) // Order quantity is not blank
+            {
+              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+              {
+                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+                if (itemPricing == undefined) // SKU is assumed to be invalid
+                  exportData_WithDiscountedPrices.push(
+                    ['D', 'MISCITEM', 0, item[3]], 
+                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                  )
+                else // SKU is assumed to be valid
+                {
+                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                  exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
+                }
+              }
+              else // Order quantity is not a valid number
+              {
+                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+                if (itemPricing == undefined) // SKU is assumed to be invalid
+                  exportData_WithDiscountedPrices.push(
+                    ['D', 'MISCITEM', 0, 0], 
+                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
+                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                  )
+                else // SKU is assumed to be valid
+                {
+                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                  exportData_WithDiscountedPrices.push(
+                    ['D', item[1], item[2], 0], 
+                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
+                  )
+                }
+              }
+            }
+            else // The order quantity is blank (while SKU is not)
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+              if (itemPricing == undefined) // SKU is assumed to be invalid
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              else // SKU is assumed to be valid
+              {
+                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                exportData_WithDiscountedPrices.push(
+                  ['D', item[1], item[2], 0],
+                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
+                )
+              }
+            }
+          }
+          else // The SKU is blank
+          {
+            if (isNotBlank(item[3])) // Order quantity is not blank
+            {
+              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+              {
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, item[3]], 
+                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              }
+              else // Order quantity is not a valid number
+              {
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
+                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              }
+            }
+            else // The order quantity is blank 
+            {
+              if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
+              {
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              }
+            }
+          }
+
+          if (isNotBlank(item[6])) // There are notes for the current line
+            exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
+        }
+        else // There was no line indicator
+        {
+          item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
+
+          if (isNotBlank(item[1])) // SKU is not blank
+          {
+            if (isNotBlank(item[3])) // Order quantity is not blank
+            {
+              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+              {
+                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+                if (itemPricing == undefined) // SKU is assumed to be invalid
+                  exportData_WithDiscountedPrices.push(
+                    ['D', 'MISCITEM', 0, item[3]], 
+                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                  )
+                else // SKU is assumed to be valid
+                {
+                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                  exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
+                }
+              }
+              else // Order quantity is not a valid number
+              {
+                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+                if (itemPricing == undefined) // SKU is assumed to be invalid
+                  exportData_WithDiscountedPrices.push(
+                    ['D', 'MISCITEM', 0, 0], 
+                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
+                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                  )
+                else // SKU is assumed to be valid
+                {
+                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                  exportData_WithDiscountedPrices.push(
+                    ['D', item[1], item[2], 0], 
+                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
+                  )
+                }
+              }
+            }
+            else // The order quantity is blank (while SKU is not)
+            {
+              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+              if (itemPricing == undefined) // SKU is assumed to be invalid
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              else // SKU is assumed to be valid
+              {
+                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
+                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+
+                exportData_WithDiscountedPrices.push(
+                  ['D', item[1], item[2], 0],
+                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
+                )
+              }
+            }
+          }
+          else // The SKU is blank
+          {
+            if (isNotBlank(item[3])) // Order quantity is not blank
+            {
+              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+              {
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, item[3]], 
+                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              }
+              else // Order quantity is not a valid number
+              {
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
+                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              }
+            }
+            else // The order quantity is blank 
+            {
+              if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
+              {
+                exportData_WithDiscountedPrices.push(
+                  ['D', 'MISCITEM', 0, 0], 
+                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
+                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
+                )
+              }
+            }
+          }
+
+          if (isNotBlank(item[6])) // There are notes for the current line
+            exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
+        }
+      })
+
+      const exportSheet = spreadsheet.getSheetByName('Export').clear();
+      const ranges = [[],[],[]];
+      const backgroundColours = [
+        '#c9daf8', // Make the header rows blue
+        '#fcefe1', // Make the comment rows orange
+        '#e0d5fd'  // Make the instruction comment rows purple
+      ];
+
+      exportData_WithDiscountedPrices.map((h, r) => 
+        h = (h[0] !== 'H') ? (h[0] !== 'C') ? (h[0] !== 'I') ? false : 
+        ranges[2].push('A' + (r + 1) + ':D' + (r + 1)) : // Instruction comment rows purple
+        ranges[1].push('A' + (r + 1) + ':D' + (r + 1)) : // Comment rows orange
+        ranges[0].push('A' + (r + 1) + ':D' + (r + 1))   // Header rows blue
+      )
+
+      ranges.map((rngs, r) => exportSheet.getRangeList(rngs).setBackground(backgroundColours[r])); // Set the appropriate background colours
+      exportSheet.getRange(1, 1, exportData_WithDiscountedPrices.length, 4).setNumberFormat('@').setValues(exportData_WithDiscountedPrices).activate();
+    }
   }
-  else
+  catch (e)
   {
-    var ss, itemSearchSheet, range, numRows, numItems, recentlyCreatedSheet, recentlyCreatedItems, deliveryInstructions, itemPricing, isQCL = false, exportData = [], exportData_WithDiscountedPrices = [];
-    const numSS = dashboard.getLastRow() - 1;
-    const dashboardRange = dashboard.getRange(2, 1, numSS, 5);
-
-    dashboardRange.getValues().map((customer, c) => {
-      if (dashboard.getRange(c + 2, 3).isChecked())
-      {
-        ss = SpreadsheetApp.openByUrl(customer[4]);
-        itemSearchSheet = ss.getSheetByName('Item Search');
-        recentlyCreatedSheet = ss.getSheetByName('Recently Created');
-        numItems = recentlyCreatedSheet.getLastRow();
-        recentlyCreatedItems = recentlyCreatedSheet.getSheetValues(1, 1, numItems, 1);
-        numRows = Math.max(getLastRowSpecial(itemSearchSheet.getSheetValues(1, 8, itemSearchSheet.getMaxRows(), 1)), // Description column
-                           getLastRowSpecial(itemSearchSheet.getSheetValues(1, 9, itemSearchSheet.getMaxRows(), 1))) // Item / General Order Notes column
-                  - 3; 
-        range = itemSearchSheet.getRange(4, 3, numRows, 7);
-        deliveryInstructions = itemSearchSheet.getSheetValues(2, 9, 1, 1)[0][0];
-
-        /* If there are delivery instructions, make them the final line of the order.
-         * If necessary, make multiple comment lines if comments are > 75 characters long.
-         */
-        exportData.push(...range.getValues(), // The SKUs and quantities
-          ['I', 'Provide your preferred delivery / pick up date and location below:', '', ''],
-          ...(isNotBlank(deliveryInstructions)) ? deliveryInstructions.match(/.{1,75}/g).map(c => ['I', c, '', '']) : [['I', '**Customer left this field blank**', '', '']]);
-
-        // range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
-        //   .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
-        //   .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
-        //   .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
-        //   .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
-        //   .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
-        //   .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
-        //   .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
-
-        spreadsheet.toast(customer[1] + '\'s spreadsheet has been reset.')
-      }
-    })
-
-    const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages')
-    const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
-    const BASE_PRICE = 1, LODGE_PRICE = 3, WHOLESALE_PRICE = 4;
-
-    exportData.map(item => {
-      if (item[0] === 'H')
-      {
-        isQCL = (item[1] === 'DL1015') ? true : false;
-        exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
-      }
-      else if (item[0] === 'I')
-        exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
-      else if (item[0] === 'D')
-      {
-        item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
-
-        if (isNotBlank(item[1])) // SKU is not blank
-        {
-          if (isNotBlank(item[3])) // Order quantity is not blank
-          {
-            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-            {
-              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-              if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, item[3]], 
-                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              else // SKU is assumed to be valid
-              {
-                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
-              }
-            }
-            else // Order quantity is not a valid number
-            {
-              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-              if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              else // SKU is assumed to be valid
-              {
-                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                exportData_WithDiscountedPrices.push(
-                  ['D', item[1], item[2], 0], 
-                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
-                )
-              }
-            }
-          }
-          else // The order quantity is blank (while SKU is not)
-          {
-            itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-            if (itemPricing == undefined) // SKU is assumed to be invalid
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            else // SKU is assumed to be valid
-            {
-              if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-              exportData_WithDiscountedPrices.push(
-                ['D', item[1], item[2], 0],
-                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
-              )
-            }
-          }
-        }
-        else // The SKU is blank
-        {
-          if (isNotBlank(item[3])) // Order quantity is not blank
-          {
-            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-            {
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, item[3]], 
-                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            }
-            else // Order quantity is not a valid number
-            {
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            }
-          }
-          else // The order quantity is blank 
-          {
-            if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
-            {
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            }
-          }
-        }
-
-        if (isNotBlank(item[6])) // There are notes for the current line
-          exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
-      }
-      else // There was no line indicator
-      {
-        item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
-
-        if (isNotBlank(item[1])) // SKU is not blank
-        {
-          if (isNotBlank(item[3])) // Order quantity is not blank
-          {
-            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-            {
-              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-              if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, item[3]], 
-                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              else // SKU is assumed to be valid
-              {
-                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
-              }
-            }
-            else // Order quantity is not a valid number
-            {
-              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-              if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              else // SKU is assumed to be valid
-              {
-                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                exportData_WithDiscountedPrices.push(
-                  ['D', item[1], item[2], 0], 
-                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
-                )
-              }
-            }
-          }
-          else // The order quantity is blank (while SKU is not)
-          {
-            itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-            if (itemPricing == undefined) // SKU is assumed to be invalid
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            else // SKU is assumed to be valid
-            {
-              if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-              exportData_WithDiscountedPrices.push(
-                ['D', item[1], item[2], 0],
-                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
-              )
-            }
-          }
-        }
-        else // The SKU is blank
-        {
-          if (isNotBlank(item[3])) // Order quantity is not blank
-          {
-            if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-            {
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, item[3]], 
-                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            }
-            else // Order quantity is not a valid number
-            {
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            }
-          }
-          else // The order quantity is blank 
-          {
-            if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
-            {
-              exportData_WithDiscountedPrices.push(
-                ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-              )
-            }
-          }
-        }
-
-        if (isNotBlank(item[6])) // There are notes for the current line
-          exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
-      }
-    })
-
-    const exportSheet = spreadsheet.getSheetByName('Export').clear();
-    const ranges = [[],[],[]];
-    const backgroundColours = [
-      '#c9daf8', // Make the header rows blue
-      '#fcefe1', // Make the comment rows orange
-      '#e0d5fd'  // Make the instruction comment rows purple
-    ];
-
-    exportData_WithDiscountedPrices.map((h, r) => 
-      h = (h[0] !== 'H') ? (h[0] !== 'C') ? (h[0] !== 'I') ? false : 
-      ranges[2].push('A' + (r + 1) + ':D' + (r + 1)) : // Instruction comment rows purple
-      ranges[1].push('A' + (r + 1) + ':D' + (r + 1)) : // Comment rows orange
-      ranges[0].push('A' + (r + 1) + ':D' + (r + 1))   // Header rows blue
-    )
-
-    ranges.map((rngs, r) => exportSheet.getRangeList(rngs).setBackground(backgroundColours[r])); // Set the appropriate background colours
-    exportSheet.getRange(1, 1, exportData_WithDiscountedPrices.length, 4).setNumberFormat('@').setValues(exportData_WithDiscountedPrices).activate();
+    var error = e['stack'];
+    throw new Error(error);
   }
 }
 
@@ -760,24 +825,32 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
   const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
   var approvedEditors, email;
 
-  dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 2).map((custSS, i) => {
-    if (isNotBlank(custSS[0])) // Spreadsheet URL is not blank
-    {
-      ss = SpreadsheetApp.openByUrl(custSS[0]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
-      approvedEditors = ['jarrencralf@gmail.com', 'pntnoreply@gmail.com'];
-      approvedEditors.push(...custSS[1].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
-      
-      currentEditors = ss.getEditors().map(user => {
-        email = user.getEmail();
+  try
+  {
+    dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 2).map((custSS, i) => {
+      if (isNotBlank(custSS[0])) // Spreadsheet URL is not blank
+      {
+        ss = SpreadsheetApp.openByUrl(custSS[0]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
+        approvedEditors = ['jarrencralf@gmail.com', 'pntnoreply@gmail.com'];
+        approvedEditors.push(...custSS[1].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
+        
+        currentEditors = ss.getEditors().map(user => {
+          email = user.getEmail();
 
-        if (!approvedEditors.includes(email)) // If an editor is not on the approved email list, then remove them
-          ss.removeEditor(email);
-      });
+          if (!approvedEditors.includes(email)) // If an editor is not on the approved email list, then remove them
+            ss.removeEditor(email);
+        });
 
-      ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
-      dashboard.getRange(2 + i, 7).check(); // Check the box that signals if the spreadsheet is appropriately shared with the relevant emails
-    }
-  })
+        ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
+        dashboard.getRange(2 + i, 7).check(); // Check the box that signals if the spreadsheet is appropriately shared with the relevant emails
+      }
+    })
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    throw new Error(error);
+  }
 }
 
 /**
@@ -880,6 +953,32 @@ function sendConfirmationEmail(name, ssUrl)
 }
 
 /**
+ * This function sends an email to Jarren to give a heads up that a function in apps script has failed to run.
+ * 
+ * @param {String} error : The property of the error object that displays the functions and line numbers that the error occurs at.
+ * @author Jarren Ralf
+ */
+function sendErrorEmail(error)
+{
+  if (MailApp.getRemainingDailyQuota() > 3) // Don't try and send an email if the daily quota of emails has been sent
+  {
+    var today = new Date()
+    var formattedError = '<p>' + error.replaceAll(' at ', '<br /> &emsp;&emsp;&emsp;') + '</p>';
+    var templateHtml = HtmlService.createTemplateFromFile('FunctionFailedToRun');
+    templateHtml.dateAndTime = today.toLocaleTimeString() + ' on ' + today.toDateString();
+    templateHtml.scriptURL   = "https://script.google.com/home/projects/178jXC1SLz1GQpIOiNLgRAzE4j4A-F1jt4OatEQ3BLLwaO3nH4rZrRDRm/edit";
+    var emailBody = templateHtml.evaluate().append(formattedError).getContent();
+    
+    MailApp.sendEmail({      to: 'lb_blitz_allstar@hotmail.com',
+                        subject: 'Lodge Order Processor Script Failure', 
+                       htmlBody: emailBody
+    });
+  }
+  else
+    Logger.log('No email sent because it appears that the daily quota of emails has been met!')
+}
+
+/**
  * This function gets the selected cells from the user on the Dashboard and shares the selected spreadsheets with the email addresses provided.
  * 
  * @author Jarren Ralf
@@ -889,24 +988,32 @@ function shareSpreadsheetsWithSelectedUsers()
   const spreadsheet = SpreadsheetApp.getActive();
   const dashboard = spreadsheet.getActiveSheet();
 
-  if (dashboard.getSheetName() !== 'Dashboard')
+  try
   {
-    spreadsheet.getSheetByName('Dashboard').activate();
-    Browser.msgBox('Please return to the Dashboard to run this function.')
+    if (dashboard.getSheetName() !== 'Dashboard')
+    {
+      spreadsheet.getSheetByName('Dashboard').activate();
+      Browser.msgBox('Please return to the Dashboard to run this function.')
+    }
+    else
+    {
+      dashboard.getActiveRangeList().getRanges().map(rng => {
+        rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
+            if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
+            {
+              ss = SpreadsheetApp.openByUrl(custSS[0]);
+              ss.addEditors(custSS[1].split(',').map(email => email.trim()));
+              ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()))
+              rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
+            }
+          })
+      })
+    }
   }
-  else
+  catch (e)
   {
-    dashboard.getActiveRangeList().getRanges().map(rng => {
-      rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
-          if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
-          {
-            ss = SpreadsheetApp.openByUrl(custSS[0]);
-            ss.addEditors(custSS[1].split(',').map(email => email.trim()));
-            ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()))
-            rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
-          }
-        })
-    })
+    var error = e['stack'];
+    throw new Error(error);
   }
 }
 
@@ -966,96 +1073,105 @@ function updateCustomerName(range, value, spreadsheet)
 function updateCustomerSpreadsheets()
 {
   var splitDescription, newDescription, ss, d, velocityReportSheet, velocityReportSheetName, invoiceSheet, customerInvoiceData, itemList = [];
-  const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
-  const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
-  const invoiceData = invoiceDataSheet.getSheetValues(2, 1, invoiceDataSheet.getLastRow() - 1, 8).map(item => {
-    item[4] = (item[4] === '100') ? 'Richmond' : (item[4] === '200') ? 'Parksville' : 'Prince Rupert';
-    splitDescription = item[0].split(' - ');
-    sku = splitDescription.pop();
-    uom = splitDescription.pop();
-    splitDescription.pop();
-    splitDescription.push(uom, sku);
-    item[0] = splitDescription.join(' - ');
 
-    return item;
-  })
-  
-  const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
-  const customerListSheet = lodgeSalesSS.getSheetByName('Customer List');
-  const customerList = customerListSheet.getSheetValues(3, 1, customerListSheet.getLastRow() - 2, 3);
-  const numYears = new Date().getFullYear() - 2011;
-  const CUST_NAME = 0, SALES_TOTAL = 2;
+  try
+  {
+    const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
+    const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
+    const invoiceData = invoiceDataSheet.getSheetValues(2, 1, invoiceDataSheet.getLastRow() - 1, 8).map(item => {
+      item[4] = (item[4] === '100') ? 'Richmond' : (item[4] === '200') ? 'Parksville' : 'Prince Rupert';
+      splitDescription = item[0].split(' - ');
+      sku = splitDescription.pop();
+      uom = splitDescription.pop();
+      splitDescription.pop();
+      splitDescription.push(uom, sku);
+      item[0] = splitDescription.join(' - ');
 
-  invoiceData.shift() // Remove the header
+      return item;
+    })
+    
+    const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
+    const customerListSheet = lodgeSalesSS.getSheetByName('Customer List');
+    const customerList = customerListSheet.getSheetValues(3, 1, customerListSheet.getLastRow() - 2, 3);
+    const numYears = new Date().getFullYear() - 2011;
+    const CUST_NAME = 0, SALES_TOTAL = 2;
 
-  const sortedItems = Utilities.parseCsv(DriveApp.getFilesByName("inventory.csv").next().getBlob().getDataAsString()).map(item => {
-    splitDescription = item[1].split(' - ');
-    splitDescription.splice(-4, 1);
-    newDescription = splitDescription.join(' - ');
-    itemList.push([newDescription]);
+    invoiceData.shift() // Remove the header
 
-    d = item[6].split('.');                           // Split the date at the "."
-    item[6] = new Date(d[2],d[1] - 1,d[0]).getTime(); // Convert the date sting to a striong object for sorting purposes
-      
-    return [newDescription, item[6]];
-  }).sort(sortByCreatedDate).sort(sortByCreatedDate).map(descrip => [descrip[0]])
+    const sortedItems = Utilities.parseCsv(DriveApp.getFilesByName("inventory.csv").next().getBlob().getDataAsString()).map(item => {
+      splitDescription = item[1].split(' - ');
+      splitDescription.splice(-4, 1);
+      newDescription = splitDescription.join(' - ');
+      itemList.push([newDescription]);
 
-  // Remove the headers
-  itemList.shift();
-  sortedItems.shift();
+      d = item[6].split('.');                           // Split the date at the "."
+      item[6] = new Date(d[2],d[1] - 1,d[0]).getTime(); // Convert the date sting to a striong object for sorting purposes
+        
+      return [newDescription, item[6]];
+    }).sort(sortByCreatedDate).sort(sortByCreatedDate).map(descrip => [descrip[0]])
 
-  dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 5).getValues()
-    .map(customer => {
-      if (isNotBlank(customer[4]))
-      {
-        ss = SpreadsheetApp.openByUrl(customer[4])
-        ss.getSheetByName('Item List').getRange(1, 1, itemList.length).setValues(itemList);
-        ss.getSheetByName('Recently Created').getRange(1, 1, itemList.length).setValues(sortedItems);
-        ss.deleteSheet(ss.getSheetByName('Yearly Purchase Report'));
-        ss.deleteSheet(ss.getSheetByName('Chart'));
-        ss.deleteSheet(ss.getSheetByName('Past Invoices'));
+    // Remove the headers
+    itemList.shift();
+    sortedItems.shift();
 
-        velocityReportSheetName = customerList.find(custNum => custNum[0] === customer[0]);
-        lodgeSalesSS.getSheetByName(velocityReportSheetName[2]).copyTo(ss);
-        velocityReportSheet = ss.getSheetByName('Copy of ' + velocityReportSheetName[2]).setName('Yearly Purchase Report');
-        chartTitleInfo = velocityReportSheet.getRange(1, 2, 1, 3).getDisplayValues()[0];
+    dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 5).getValues()
+      .map(customer => {
+        if (isNotBlank(customer[4]))
+        {
+          ss = SpreadsheetApp.openByUrl(customer[4])
+          ss.getSheetByName('Item List').getRange(1, 1, itemList.length).setValues(itemList);
+          ss.getSheetByName('Recently Created').getRange(1, 1, itemList.length).setValues(sortedItems);
+          ss.deleteSheet(ss.getSheetByName('Yearly Purchase Report'));
+          ss.deleteSheet(ss.getSheetByName('Chart'));
+          ss.deleteSheet(ss.getSheetByName('Past Invoices'));
 
-        chart = velocityReportSheet.newChart()
-          .asColumnChart()
-          .addRange(velocityReportSheet.getRange(3, 5, numYears, 2))
-          .setNumHeaders(0)
-          .setXAxisTitle('Year')
-          .setYAxisTitle('Sales Total')
-          .setTransposeRowsAndColumns(false)
-          .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
-          .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_BOTH)
-          .setOption('title', chartTitleInfo[CUST_NAME])
-          .setOption('subtitle', 'Total: ' + chartTitleInfo[SALES_TOTAL])
-          .setOption('isStacked', 'false')
-          .setOption('bubble.stroke', '#000000')
-          .setOption('textStyle.color', '#000000')
-          .setOption('useFirstColumnAsDomain', true)
-          .setOption('titleTextStyle.color', '#757575')
-          .setOption('legend.textStyle.color', '#1a1a1a')
-          .setOption('subtitleTextStyle.color', '#999999')
-          .setOption('series', {0: {hasAnnotations: true, dataLabel: 'value'}})
-          .setOption('trendlines', {0: {lineWidth: 4, type: 'linear', color: '#6aa84f'}})
-          .setOption('hAxis', {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}})
-          .setOption('annotations', {domain: {textStyle: {color: '#808080'}}, total: {textStyle : {color: '#808080'}}})
-          .setOption('vAxes', {0: {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}, minorGridlines: {count: 2}}})
-          .setPosition(1, 1, 0, 0)
-          .build();
+          velocityReportSheetName = customerList.find(custNum => custNum[0] === customer[0]);
+          lodgeSalesSS.getSheetByName(velocityReportSheetName[2]).copyTo(ss);
+          velocityReportSheet = ss.getSheetByName('Copy of ' + velocityReportSheetName[2]).setName('Yearly Purchase Report');
+          chartTitleInfo = velocityReportSheet.getRange(1, 2, 1, 3).getDisplayValues()[0];
 
-        velocityReportSheet.insertChart(chart);
-        ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232').getSheetId();
+          chart = velocityReportSheet.newChart()
+            .asColumnChart()
+            .addRange(velocityReportSheet.getRange(3, 5, numYears, 2))
+            .setNumHeaders(0)
+            .setXAxisTitle('Year')
+            .setYAxisTitle('Sales Total')
+            .setTransposeRowsAndColumns(false)
+            .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
+            .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_BOTH)
+            .setOption('title', chartTitleInfo[CUST_NAME])
+            .setOption('subtitle', 'Total: ' + chartTitleInfo[SALES_TOTAL])
+            .setOption('isStacked', 'false')
+            .setOption('bubble.stroke', '#000000')
+            .setOption('textStyle.color', '#000000')
+            .setOption('useFirstColumnAsDomain', true)
+            .setOption('titleTextStyle.color', '#757575')
+            .setOption('legend.textStyle.color', '#1a1a1a')
+            .setOption('subtitleTextStyle.color', '#999999')
+            .setOption('series', {0: {hasAnnotations: true, dataLabel: 'value'}})
+            .setOption('trendlines', {0: {lineWidth: 4, type: 'linear', color: '#6aa84f'}})
+            .setOption('hAxis', {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}})
+            .setOption('annotations', {domain: {textStyle: {color: '#808080'}}, total: {textStyle : {color: '#808080'}}})
+            .setOption('vAxes', {0: {textStyle: {color: '#000000'}, titleTextStyle: {color: '#000000'}, minorGridlines: {count: 2}}})
+            .setPosition(1, 1, 0, 0)
+            .build();
 
-        customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]);
-          
-        invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')})
-        invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setValues(customerInvoiceData);
-        invoiceSheet.deleteColumn(2);
-      }
-  })
+          velocityReportSheet.insertChart(chart);
+          ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232').getSheetId();
+
+          customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]);
+            
+          invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')})
+          invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setValues(customerInvoiceData);
+          invoiceSheet.deleteColumn(2);
+        }
+    })
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    throw new Error(error);
+  }
 }
 
 /**
