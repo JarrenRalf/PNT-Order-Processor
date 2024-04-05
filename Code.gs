@@ -505,7 +505,7 @@ function getExportData()
               if (itemPricing == undefined) // SKU is assumed to be invalid
                 exportData_WithDiscountedPrices.push(
                   ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
                   ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
                 )
               else // SKU is assumed to be valid
@@ -515,7 +515,7 @@ function getExportData()
 
                 exportData_WithDiscountedPrices.push(
                   ['D', item[1], item[2], 0], 
-                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', '']
+                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
                 )
               }
             }
@@ -557,7 +557,7 @@ function getExportData()
             {
               exportData_WithDiscountedPrices.push(
                 ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
                 ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
               )
             }
@@ -610,7 +610,7 @@ function getExportData()
               if (itemPricing == undefined) // SKU is assumed to be invalid
                 exportData_WithDiscountedPrices.push(
                   ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
                   ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
                 )
               else // SKU is assumed to be valid
@@ -620,7 +620,7 @@ function getExportData()
 
                 exportData_WithDiscountedPrices.push(
                   ['D', item[1], item[2], 0], 
-                  ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', '']
+                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
                 )
               }
             }
@@ -662,7 +662,7 @@ function getExportData()
             {
               exportData_WithDiscountedPrices.push(
                 ['D', 'MISCITEM', 0, 0], 
-                ['C', 'Invalid order quantity for the above item, therefore it was replaced with 0', '', ''], 
+                ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
                 ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
               )
             }
@@ -686,7 +686,21 @@ function getExportData()
     })
 
     const exportSheet = spreadsheet.getSheetByName('Export').clear();
-    exportSheet.getRangeList(exportData_WithDiscountedPrices.map((h, r) => h = (h[0] !== 'H') ? false :  'A' + (r + 1) + ':D' + (r + 1)).filter(h => h)).setBackground('#c9daf8'); // Make the header rows blue
+    const ranges = [[],[],[]];
+    const backgroundColours = [
+      '#c9daf8', // Make the header rows blue
+      '#fcefe1', // Make the comment rows orange
+      '#e0d5fd'  // Make the instruction comment rows purple
+    ];
+
+    exportData_WithDiscountedPrices.map((h, r) => 
+      h = (h[0] !== 'H') ? (h[0] !== 'C') ? (h[0] !== 'I') ? false : 
+      ranges[2].push('A' + (r + 1) + ':D' + (r + 1)) : // Instruction comment rows purple
+      ranges[1].push('A' + (r + 1) + ':D' + (r + 1)) : // Comment rows orange
+      ranges[0].push('A' + (r + 1) + ':D' + (r + 1))   // Header rows blue
+    )
+
+    ranges.map((rngs, r) => exportSheet.getRangeList(rngs).setBackground(backgroundColours[r])); // Set the appropriate background colours
     exportSheet.getRange(1, 1, exportData_WithDiscountedPrices.length, 4).setNumberFormat('@').setValues(exportData_WithDiscountedPrices).activate();
   }
 }
