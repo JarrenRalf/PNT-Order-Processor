@@ -270,6 +270,8 @@ function createTriggers()
   else
   {
     ScriptApp.newTrigger('updateCustomerSpreadsheets').timeBased().atHour(23).everyDays(1).create();
+    ScriptApp.newTrigger('removeUnapprovedEditorsFromCustomerSpreadsheet').timeBased().everyHours(1).create();
+    ScriptApp.newTrigger('formatAllCustomerSpreadsheets').timeBased().everyDays(1).atHour(3).create();
     ScriptApp.newTrigger('installedOnEdit').forSpreadsheet('1MVL3lRDKrTa1peqBCjlS9GMAysdOD13_Sl0ygYb8VpE').onEdit().create();
   }
 }
@@ -326,6 +328,82 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
     //     })
     // })
   }
+}
+
+/**
+ * This function formats the customers spreadsheets. A trigger runs this function daily. Due to the amount of possible customer spreadsheets, in order to avoid maxing out the runtime,
+ * each day of the week it formats different customers. The result is each customer gets their spreadsheet formatted once a week.
+ * 
+ * @author Jarren Ralf
+ */
+function formatAllCustomerSpreadsheets()
+{
+  const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
+  const dayOfWeek = new Date().getDay();
+  var itemSearchSheet, maxRows, today, startTime;
+
+  dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 1).map((custSS, i) => {
+
+    startTime = new Date().getTime(); // Reset the function runtime
+    
+    if (i % 6 === dayOfWeek && isNotBlank(custSS[0])) // If spreadsheet URL is not blank, and use the day of the week (Sun - Sat => 0 - 6) in order to decide which spreadsheets to format
+    {
+      itemSearchSheet = SpreadsheetApp.openByUrl(custSS[0]).getSheetByName('Item Search');
+      maxRows = itemSearchSheet.getMaxRows() - 4;
+
+      itemSearchSheet.getRange(5, 1, maxRows, itemSearchSheet.getMaxColumns()).setBorder(false, false, false, false, false, false) // The full range below the header
+          .setBackgrounds(new Array(maxRows).fill(['#cccccc', '#4a86e8', '#cccccc', '#cccccc', '#cccccc', 'white', '#cccccc', 'white', 'white']))
+          .setFontColors(new Array(maxRows).fill(['#434343', '#4a86e8', '#434343', '#434343', '#434343', 'black', '#434343', 'black', 'black']))
+          .setFontFamily('Arial')
+          .setFontLine('none')
+          .setFontSize(10)
+          .setFontStyle('normal')
+          .setFontWeight('bold')
+          .setHorizontalAlignments(new Array(maxRows).fill(['left', 'center', 'center', 'center', 'center', 'center', 'center', 'left', 'left']))
+          .setNumberFormat('@')
+          .setVerticalAlignment('middle')
+          .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+        .offset( 0, 1, maxRows, 1).setBorder(false, true, false, true, null, false, '#1155cc', SpreadsheetApp.BorderStyle.SOLID_THICK) // The vertical blue line below the header
+        .offset(-3, 4, 1, 3).setBorder(false, false, false, false, false, null) // The checkbox, timestamp, and item information display
+          .setBackground('#4a86e8')
+          .setFontColors([['white', 'white', '#ffff00']])
+          .setFontFamily('Arial')
+          .setFontLine('none')
+          .setFontSizes([[34, 11, 16]])
+          .setFontStyle('normal')
+          .setFontWeight('bold')
+          .setHorizontalAlignment('center')
+          .setNumberFormats([['#', '@', '@']])
+          .setVerticalAlignment('middle')
+          .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+        .offset(0, 3, 1, 1).setBorder(true, true, true, true, null, null, 'black', SpreadsheetApp.BorderStyle.SOLID_THICK) // The delivery instructions
+          .setBackground('white')
+          .setFontColor('black')
+          .setFontFamily('Arial')
+          .setFontLine('none')
+          .setFontSize(11)
+          .setFontStyle('normal')
+          .setFontWeight('bold')
+          .setHorizontalAlignment('left')
+          .setNumberFormat('@')
+          .setVerticalAlignment('middle')
+          .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+        .offset(-1, -1, 1, 1).setBorder(true, true, true, true, null, null, 'black', SpreadsheetApp.BorderStyle.SOLID_THICK) // The PO number
+          .setBackground('white')
+          .setFontColor('black')
+          .setFontFamily('Arial')
+          .setFontLine('none')
+          .setFontSize(11)
+          .setFontStyle('normal')
+          .setFontWeight('bold')
+          .setHorizontalAlignment('left')
+          .setNumberFormat('@')
+          .setVerticalAlignment('middle')
+          .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
+
+      Logger.log(itemSearchSheet.getSheetValues(1, 2, 1, 1)[0][0] + '\'s spreadsheet has been successfully formatted in ' + (new Date().getTime() - startTime)/1000 + ' seconds.')
+    }
+  })
 }
 
 /**
@@ -708,8 +786,7 @@ function updateCustomerSpreadsheets()
     return item;
   })
   
-  const spreadsheet = SpreadsheetApp.getActive();
-  const dashboard = spreadsheet.getSheetByName('Dashboard');
+  const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
   const customerListSheet = lodgeSalesSS.getSheetByName('Customer List');
   const customerList = customerListSheet.getSheetValues(3, 1, customerListSheet.getLastRow() - 2, 3);
   const numYears = new Date().getFullYear() - 2011;
