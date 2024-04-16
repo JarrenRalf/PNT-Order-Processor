@@ -52,10 +52,7 @@ function onChange(e)
 
       for (var i = 0; i < customerInfo.length; i++)
         if (customerInfo[i][2]) // Check if the change has been made in the last 5 seconds
-          if (dashboard.getRange(i + 2, 3).isChecked())
-            sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]);
-          else
-            sendCancelationEmail(customerInfo[i][0], customerInfo[i][3]);
+          (dashboard.getRange(i + 2, 3).isChecked()) ? sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]) : sendCancelationEmail(customerInfo[i][0], customerInfo[i][3]);
     }
   }
   catch (e)
@@ -81,6 +78,34 @@ function onOpen()
       .addItem('Clear Export', 'clearExport')
       .addItem('Get Export Data', 'getExportData')
     .addToUi();
+}
+
+/**
+ * This function...
+ * 
+ * @author Jarren Ralf
+ */
+function sendInstructionalEmail()
+{
+  const htmlTemplate = HtmlService.createTemplateFromFile("Instructional Email");
+  const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles();
+  var file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null, 13: null};
+  htmlTemplate.lodgeName = 'QCL'
+  htmlTemplate.pntOrderFormURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
+
+  while (files.hasNext())
+  {
+    file = files.next();
+    emailImages[file.getName().split('_', 1)[0]] = file.getAs("image/gif"); 
+  }
+  
+  MailApp.sendEmail({
+    to: "lb_blitz_allstar@hotmail.com",
+    name: "Jarren Ralf",
+    subject: "Pacific Net & Twine (PNT) Order Form",
+    htmlBody: htmlTemplate.evaluate().getContent(),
+    inlineImages: emailImages
+  });
 }
 
 /**
@@ -285,7 +310,7 @@ function createSSforSelectedCustomers()
             customer[3] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!B4\")";
             customer[4] = url;
 
-            rng.offset(i, 1 - rng.getColumn(), 1, 5).setValues([customer]);
+            rng.offset(i, 1 - rng.getColumn(), 1, 5).setValues([customer]).offset(0, 6, 1, 2).uncheck();
             return customer;
           }
         })
@@ -342,6 +367,7 @@ function deleteTriggers()
 
 /**
  * This function gets the selected cells from the user on the Dashboard and emails (and shares) the selected spreadsheets with the email addresses provided.
+ * It also sends an email to each address listed with an set of instructions for how to use the spreadsheet.
  * 
  * @author Jarren Ralf
  */
@@ -359,17 +385,41 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
     }
     else
     {
-      // dashboard.getActiveRangeList().getRanges().map(rng => {
-      //   rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
-      //       if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
-      //       {
-      //         ss = SpreadsheetApp.openByUrl(custSS[0]);
-      //         ss.addEditors(custSS[1].split(',').map(email => email.trim()));
-      //         ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()))
-      //         rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
-      //       }
-      //     })
-      // })
+      const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles(); // The inline gif images for the instructional email
+      var htmlTemplate = HtmlService.createTemplateFromFile("Instructional Email"); // The email template
+      var ss, emails, file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null, 13: null};
+      
+      while (files.hasNext()) // Loop through the gifs
+      {
+        file = files.next();
+        emailImages[file.getName().split('_', 1)[0]] = file.getAs("image/gif"); // Sort them correctly into their place in the object
+      }
+      
+      dashboard.getActiveRangeList().getRanges().map(rng => {
+        rng.offset(0, 2 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((custSS, i) => {
+            if (isNotBlank(custSS[3]) && isNotBlank(custSS[4])) // The URL and emails are not blank
+            {
+              ss = SpreadsheetApp.openByUrl(custSS[3]);
+              emails = custSS[4].split(',').map(email => email.trim());
+              ss.addEditors(emails);
+              ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
+
+              htmlTemplate.lodgeName = custSS[0];
+              htmlTemplate.pntOrderFormURL = custSS[3];
+
+              MailApp.sendEmail({
+                to: emails.join(","),
+                name: "Jarren Ralf",
+                subject: "Pacific Net & Twine (PNT) Order Form",
+                htmlBody: htmlTemplate.evaluate().getContent(),
+                inlineImages: emailImages
+              });
+
+              spreadsheet.toast('The instructional email has been sent to ' + custSS[0], 'Email Sent')
+              rng.offset(i, 7 - rng.getColumn(), 1, 2).check();
+            }
+          })
+      })
     }
   }
   catch (e)
@@ -759,7 +809,7 @@ function getExportData()
         ranges[0].push('A' + (r + 1) + ':D' + (r + 1))   // Header rows blue
       )
 
-      ranges.map((rngs, r) => exportSheet.getRangeList(rngs).setBackground(backgroundColours[r])); // Set the appropriate background colours
+      ranges.map((rngs, r) => (rngs.length !== 0) ? exportSheet.getRangeList(rngs).setBackground(backgroundColours[r]) : false); // Set the appropriate background colours
       exportSheet.getRange(1, 1, exportData_WithDiscountedPrices.length, 4).setNumberFormat('@').setValues(exportData_WithDiscountedPrices).activate();
     }
   }
@@ -997,6 +1047,8 @@ function shareSpreadsheetsWithSelectedUsers()
     }
     else
     {
+      var ss;
+
       dashboard.getActiveRangeList().getRanges().map(rng => {
         rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
             if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
@@ -1061,7 +1113,7 @@ function updateCustomerName(range, value, spreadsheet)
       range.setValue('') // There was no customer account number to the left, so assume that the user made a mistake in their input
   }
   else // The value in the customer name column is blank
-    range.offset(0, -1, 1, 7).setValues([['', '', false, '', '', '', false]]); // Remove the customer number if there is one
+    range.offset(0, -1, 1, 8).setValues([['', '', false, '', '', '', false, false]]); // Remove the customer number if there is one
 }
 
 /**
