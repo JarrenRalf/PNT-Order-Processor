@@ -1029,7 +1029,7 @@ function sendErrorEmail(error)
     var formattedError = '<p>' + error.replaceAll(' at ', '<br /> &emsp;&emsp;&emsp;') + '</p>';
     var templateHtml = HtmlService.createTemplateFromFile('FunctionFailedToRun');
     templateHtml.dateAndTime = today.toLocaleTimeString() + ' on ' + today.toDateString();
-    templateHtml.scriptURL   = "https://script.google.com/home/projects/178jXC1SLz1GQpIOiNLgRAzE4j4A-F1jt4OatEQ3BLLwaO3nH4rZrRDRm/edit";
+    templateHtml.scriptURL   = "https://script.google.com/u/0/home/projects/1tuY0zWpu_kZtb6TQDsxgYligCOs159qQvQ5bj_nhZTq1sNR8T8LC--Wz/edit";
     var emailBody = templateHtml.evaluate().append(formattedError).getContent();
     
     MailApp.sendEmail({      to: 'lb_blitz_allstar@hotmail.com',
