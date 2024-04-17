@@ -401,7 +401,7 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
             {
               ss = SpreadsheetApp.openByUrl(custSS[3]);
               emails = custSS[4].split(',').map(email => email.trim());
-              ss.addEditors(emails);
+              ss.addEditors(emails.filter(email => email.split('@').pop() === 'gmail.com'));
               ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
 
               htmlTemplate.lodgeName = custSS[0];
@@ -867,13 +867,14 @@ function isNotBlank(str)
 
 /**
  * This function runs on a trigger every X and it removes any editors from the each customer spreadsheet that are not contained in the corresponding Customer Email(s) column on the Dashboard.
+ * It also checks if the drawings are missing an assigned script, if they are, then it reassigns them.
  * 
  * @author Jarren Ralf
  */
 function removeUnapprovedEditorsFromCustomerSpreadsheet()
 {
   const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
-  var approvedEditors, email;
+  var approvedEditors, email, drawings;
 
   try
   {
@@ -881,6 +882,18 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
       if (isNotBlank(custSS[0])) // Spreadsheet URL is not blank
       {
         ss = SpreadsheetApp.openByUrl(custSS[0]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
+
+        // These are the drawings that are used as buttons for the users
+        drawings = ss.getSheetByName('Item Search').getDrawings().map(drawing => {
+          return {'button': drawing, 'x': drawing.getContainerInfo().getOffsetX(), 'w': drawing.getWidth(), 'isScriptNotAssigned': drawing.getOnAction() === ''}
+        })
+
+        if (drawings[0].isScriptNotAssigned) // If Script is missing, then assign it back to the button
+          drawings[0].button.setOnAction((drawings[0].x < drawings[1].x && drawings[0].w < drawings[1].w) ? 'allItems' : 'addSelectedItemsToOrder');
+        
+        if (drawings[1].isScriptNotAssigned) // If Script is missing, then assign it back to the button
+          drawings[1].button.setOnAction((drawings[1].x < drawings[0].x && drawings[1].w < drawings[0].w) ? 'allItems' : 'addSelectedItemsToOrder');
+
         approvedEditors = ['jarrencralf@gmail.com', 'pntnoreply@gmail.com'];
         approvedEditors.push(...custSS[1].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
         
