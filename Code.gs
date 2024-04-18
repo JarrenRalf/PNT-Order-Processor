@@ -3,6 +3,7 @@
  * or if a checkbox becomes check, signifying that order has been submitted.
  * 
  * @param {Event Object} e : The event object
+ * @throws General error if anything goes wrong
  */
 function installedOnEdit(e)
 {
@@ -35,6 +36,7 @@ function installedOnEdit(e)
  * so that an email can be sent to the relevant PNT employees.
  * 
  * @param {Event Object} e : The event object
+ * @throws General error if anything goes wrong
  */
 function onChange(e)
 {
@@ -367,6 +369,7 @@ function deleteTriggers()
  * This function gets the selected cells from the user on the Dashboard and emails (and shares) the selected spreadsheets with the email addresses provided.
  * It also sends an email to each address listed with an set of instructions for how to use the spreadsheet.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function emailAndShareSpreadsheetsWithSelectedUsers()
@@ -431,6 +434,7 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
  * This function formats the customers spreadsheets. A trigger runs this function daily. Due to the amount of possible customer spreadsheets, in order to avoid maxing out the runtime,
  * each day of the week it formats different customers. The result is each customer gets their spreadsheet formatted once a week.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function formatAllCustomerSpreadsheets()
@@ -514,6 +518,7 @@ function formatAllCustomerSpreadsheets()
 /**
  * This function gets the export data from all of the customer's spreadsheets that have submitted their order.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function getExportData()
@@ -867,6 +872,7 @@ function isNotBlank(str)
  * This function runs on a trigger every X and it removes any editors from the each customer spreadsheet that are not contained in the corresponding Customer Email(s) column on the Dashboard.
  * It also checks if the drawings are missing an assigned script, if they are, then it reassigns them.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function removeUnapprovedEditorsFromCustomerSpreadsheet()
@@ -1042,6 +1048,7 @@ function sendErrorEmail(error)
 /**
  * This function gets the selected cells from the user on the Dashboard and shares the selected spreadsheets with the email addresses provided.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function shareSpreadsheetsWithSelectedUsers()
@@ -1131,6 +1138,7 @@ function updateCustomerName(range, value, spreadsheet)
  * This function updates the customers spreadsheets. A trigger runs this function daily. The list of items are updated, as well as the customer's
  * velocity report and invoice data.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function updateCustomerSpreadsheets()
@@ -1237,6 +1245,7 @@ function updateCustomerSpreadsheets()
 /**
  * This function updates the item list and recently created items sheet on the template spreadsheet.
  * 
+ * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function updateOrderSheet_TEMPLATE()
