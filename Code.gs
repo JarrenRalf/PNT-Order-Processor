@@ -218,7 +218,7 @@ function createSSforSelectedCustomers()
     }
     else
     {
-      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, splitDescription, sku, uom, colours = [], numRows, horizontalAligns, colourSelector = true;
+      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
       const templateSS = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ');
       const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
       const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
@@ -226,10 +226,7 @@ function createSSforSelectedCustomers()
       const invoiceData = invoiceDataSheet.getSheetValues(2, 1, invoiceDataSheet.getLastRow() - 1, 8).map(item => {
         item[4] = (item[4] === '100') ? 'Richmond' : (item[4] === '200') ? 'Parksville' : 'Prince Rupert'; // Convert 100, 200, and 300 location codes to the appropriate names for the customers
         splitDescription = item[0].split(' - ');
-        sku = splitDescription.pop();
-        uom = splitDescription.pop();
-        splitDescription.pop();
-        splitDescription.push(uom, sku);
+        splitDescription.splice(-4, 1);
         item[0] = splitDescription.join(' - ');
 
         return item;
@@ -558,14 +555,14 @@ function getExportData()
             ['I', 'Provide your preferred delivery / pick up date and location below:', '', ''],
             ...(isNotBlank(deliveryInstructions)) ? deliveryInstructions.match(/.{1,75}/g).map(c => ['I', c, '', '']) : [['I', '**Customer left this field blank**', '', '']]);
 
-          // range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
-          //   .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
-          //   .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
-          //   .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
-          //   .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
-          //   .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
-          //   .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
-          //   .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
+          range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
+            .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
+            .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
+            .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
+            .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
+            .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
+            .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
+            .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
 
           spreadsheet.toast(customer[1] + '\'s spreadsheet has been reset.')
         }
@@ -1147,10 +1144,7 @@ function updateCustomerSpreadsheets()
     const invoiceData = invoiceDataSheet.getSheetValues(2, 1, invoiceDataSheet.getLastRow() - 1, 8).map(item => {
       item[4] = (item[4] === '100') ? 'Richmond' : (item[4] === '200') ? 'Parksville' : 'Prince Rupert';
       splitDescription = item[0].split(' - ');
-      sku = splitDescription.pop();
-      uom = splitDescription.pop();
-      splitDescription.pop();
-      splitDescription.push(uom, sku);
+      splitDescription.splice(-4, 1);
       item[0] = splitDescription.join(' - ');
 
       return item;
@@ -1273,8 +1267,10 @@ function updateOrderSheet_TEMPLATE()
     spreadsheet.getSheetByName('Recently Created').getRange(1, 1, numItems).setValues(sortedItems);
     itemSearchSheet.getRange(1, 1).setValue('') // The search box
       .offset(0,  7).setValue('') // PO #
-      .offset(1,  1).setValue('') // Delivery Instructions
-      .offset(3, -8, itemSearchSheet.getMaxRows() - 4).setValue('') // Clear the previous items
+      .offset(1,  0).setValue('Items displayed in order of newest to oldest.') // Display message
+      .offset(0,  1).setValue('') // Delivery Instructions
+      .offset(0, -3).uncheck() // Uncheck the Submission Box
+      .offset(3, -5, itemSearchSheet.getMaxRows() - 4).setValue('') // Clear the previous items
       .offset(0,  0, numItems).setValues(sortByCreatedDate) // Set the recent items on the sheet
   }
   catch (e)
