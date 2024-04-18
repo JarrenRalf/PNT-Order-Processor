@@ -100,9 +100,9 @@ function sendInstructionalEmail()
   }
   
   MailApp.sendEmail({
-    to: "lb_blitz_allstar@hotmail.com",
+    to: "lb_blitz_allstar@hotmail.com,eryn@pacificnetandtwine.com",
     name: "Jarren Ralf",
-    subject: "Pacific Net & Twine (PNT) Order Form",
+    subject: "Hey Eryn, Thanks for the input! How does this look? Any more suggestions?",
     htmlBody: htmlTemplate.evaluate().getContent(),
     inlineImages: emailImages
   });
