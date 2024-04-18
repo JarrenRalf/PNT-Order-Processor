@@ -336,6 +336,7 @@ function createTriggers()
   else
   {
     ScriptApp.newTrigger('updateCustomerSpreadsheets').timeBased().atHour(23).everyDays(1).create();
+    ScriptApp.newTrigger('updateOrderSheet_TEMPLATE').timeBased().atHour(23).everyDays(1).create();
     ScriptApp.newTrigger('removeUnapprovedEditorsFromCustomerSpreadsheet').timeBased().everyHours(1).create();
     ScriptApp.newTrigger('formatAllCustomerSpreadsheets').timeBased().everyDays(1).atHour(3).create();
     ScriptApp.newTrigger('installedOnEdit').forSpreadsheet('1MVL3lRDKrTa1peqBCjlS9GMAysdOD13_Sl0ygYb8VpE').onEdit().create();
@@ -1231,6 +1232,50 @@ function updateCustomerSpreadsheets()
           invoiceSheet.deleteColumn(2);
         }
     })
+  }
+  catch (e)
+  {
+    var error = e['stack'];
+    throw new Error(error);
+  }
+}
+
+/**
+ * This function updates the item list and recently created items sheet on the template spreadsheet.
+ * 
+ * @author Jarren Ralf
+ */
+function updateOrderSheet_TEMPLATE()
+{
+  var splitDescription, newDescription, d,  itemList = [];
+
+  try
+  {
+    const spreadsheet = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ') // The template spreadsheet
+    const sortedItems = Utilities.parseCsv(DriveApp.getFilesByName("inventory.csv").next().getBlob().getDataAsString()).map(item => {
+      splitDescription = item[1].split(' - ');
+      splitDescription.splice(-4, 1);
+      newDescription = splitDescription.join(' - ');
+      itemList.push([newDescription]);
+
+      d = item[6].split('.');                           // Split the date at the "."
+      item[6] = new Date(d[2],d[1] - 1,d[0]).getTime(); // Convert the date sting to a striong object for sorting purposes
+        
+      return [newDescription, item[6]];
+    }).sort(sortByCreatedDate).sort(sortByCreatedDate).map(descrip => [descrip[0]])
+
+    // Remove the headers
+    itemList.shift();
+    sortedItems.shift();
+    const numItems = itemList.length;
+    const itemSearchSheet = spreadsheet.getSheetByName('Item Search');
+    spreadsheet.getSheetByName('Item List').getRange(1, 1, numItems).setValues(itemList);
+    spreadsheet.getSheetByName('Recently Created').getRange(1, 1, numItems).setValues(sortedItems);
+    itemSearchSheet.getRange(1, 1).setValue('') // The search box
+      .offset(0,  7).setValue('') // PO #
+      .offset(1,  1).setValue('') // Delivery Instructions
+      .offset(3, -8, itemSearchSheet.getMaxRows() - 4).setValue('') // Clear the previous items
+      .offset(0,  0, numItems).setValues(sortByCreatedDate) // Set the recent items on the sheet
   }
   catch (e)
   {
