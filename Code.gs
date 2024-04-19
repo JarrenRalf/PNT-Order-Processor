@@ -83,34 +83,6 @@ function onOpen()
 }
 
 /**
- * This function...
- * 
- * @author Jarren Ralf
- */
-function sendInstructionalEmail()
-{
-  const htmlTemplate = HtmlService.createTemplateFromFile("Instructional Email");
-  const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles();
-  var file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null, 13: null};
-  htmlTemplate.lodgeName = 'QCL'
-  htmlTemplate.pntOrderFormURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
-
-  while (files.hasNext())
-  {
-    file = files.next();
-    emailImages[file.getName().split('_', 1)[0]] = file.getAs("image/gif"); 
-  }
-  
-  MailApp.sendEmail({
-    to: "lb_blitz_allstar@hotmail.com,eryn@pacificnetandtwine.com",
-    name: "Jarren Ralf",
-    subject: "Hey Eryn, Thanks for the input! How does this look? Any more suggestions?",
-    htmlBody: htmlTemplate.evaluate().getContent(),
-    inlineImages: emailImages
-  });
-}
-
-/**
  * This function clears the export sheet and then sends Adrian a courtesy email letting him know that the import template for Adagio OrderEntry has changed.
  * 
  * @author Jarren Ralf
@@ -407,6 +379,8 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
 
               htmlTemplate.lodgeName = custSS[0];
               htmlTemplate.pntOrderFormURL = custSS[3];
+              htmlTemplate.invoiceDataURL = custSS[3] + '#' + ss.getSheetByName('Past Invoices').getSheetId();
+              htmlTemplate.velocityReportURL = custSS[3] + '#' + ss.getSheetByName('Yearly Purchase Report').getSheetId();
 
               MailApp.sendEmail({
                 to: emails.join(","),
@@ -935,7 +909,7 @@ function sendCancelationEmail(name, ssUrl)
 
   // Send an email to the PNT employees with the new order
   MailApp.sendEmail({
-    to: "lb_blitz_allstar@hotmail.com", // "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com"
+    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
     replyTo: customerEmails,
     name: 'PNT Sales',
     subject: (isPoNotBlank) ? name + " has cancelled their order, PO # " + poNum : name + " has cancelled their order",
@@ -997,7 +971,7 @@ function sendConfirmationEmail(name, ssUrl)
 
   // Send an email to the PNT employees with the new order
   MailApp.sendEmail({
-    to: "lb_blitz_allstar@hotmail.com", // "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com"
+    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com", 
     replyTo: customerEmails,
     name: 'PNT Sales',
     subject: (isPoNotBlank) ? name + " has placed an order, PO # " + poNum : name + " has placed an order!",
@@ -1037,6 +1011,7 @@ function sendErrorEmail(error)
     var emailBody = templateHtml.evaluate().append(formattedError).getContent();
     
     MailApp.sendEmail({      to: 'lb_blitz_allstar@hotmail.com',
+                           name: 'Jarren Ralf',
                         subject: 'Lodge Order Processor Script Failure', 
                        htmlBody: emailBody
     });
@@ -1098,6 +1073,36 @@ function shareSpreadsheetsWithSelectedUsers()
 function sortByCreatedDate(a, b)
 {
   return (a[1] === b[1]) ? 0 : (a[1] < b[1]) ? 1 : -1;
+}
+
+/**
+ * This function is a test of the instructional email.
+ * 
+ * @author Jarren Ralf
+ */
+function testSendInstructionalEmail()
+{
+  const htmlTemplate = HtmlService.createTemplateFromFile("Instructional Email");
+  const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles();
+  var file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null, 13: null};
+  htmlTemplate.lodgeName = 'QCL'
+  htmlTemplate.pntOrderFormURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
+  htmlTemplate.velocityReportURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
+  htmlTemplate.invoiceDataURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
+
+  while (files.hasNext())
+  {
+    file = files.next();
+    emailImages[file.getName().split('_', 1)[0]] = file.getAs("image/gif"); 
+  }
+  
+  MailApp.sendEmail({
+    to: "lb_blitz_allstar@hotmail.com,eryn@pacificnetandtwine.com",
+    name: "Jarren Ralf",
+    subject: "Hey Eryn, Thanks for the input! How does this look? Any more suggestions?",
+    htmlBody: htmlTemplate.evaluate().getContent(),
+    inlineImages: emailImages
+  });
 }
 
 /**
@@ -1279,8 +1284,8 @@ function updateOrderSheet_TEMPLATE()
       .offset(1,  0).setValue('Items displayed in order of newest to oldest.') // Display message
       .offset(0,  1).setValue('') // Delivery Instructions
       .offset(0, -3).uncheck() // Uncheck the Submission Box
-      .offset(3, -5, itemSearchSheet.getMaxRows() - 4).setValue('') // Clear the previous items
-      .offset(0,  0, numItems).setValues(sortByCreatedDate) // Set the recent items on the sheet
+      .offset(3, -5, itemSearchSheet.getMaxRows() - 4, 9).clearContent() // Clear the previous items and any order information
+      .offset(0,  0, numItems, 1).setValues(sortedItems) // Set the recent items on the sheet
   }
   catch (e)
   {
