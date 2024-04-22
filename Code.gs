@@ -1283,8 +1283,9 @@ function updateOrderSheet_TEMPLATE()
       .offset(0,  7).setValue('') // PO #
       .offset(1,  0).setValue('Items displayed in order of newest to oldest.') // Display message
       .offset(0,  1).setValue('') // Delivery Instructions
-      .offset(0, -3).uncheck() // Uncheck the Submission Box
-      .offset(3, -5, itemSearchSheet.getMaxRows() - 4, 9).clearContent() // Clear the previous items and any order information
+      .offset(0, -3).uncheck()    // Uncheck the Submission Box
+      .offset(2, -4).setValue('') // Remove the hidden timestamp
+      .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 9).clearContent() // Clear the previous items and any order information
       .offset(0,  0, numItems, 1).setValues(sortedItems) // Set the recent items on the sheet
   }
   catch (e)
