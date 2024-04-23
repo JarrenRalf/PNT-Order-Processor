@@ -374,7 +374,7 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
             {
               ss = SpreadsheetApp.openByUrl(custSS[3]);
               emails = custSS[4].split(',').map(email => email.trim());
-              ss.addEditors(emails.filter(email => email.split('@').pop() === 'gmail.com'));
+              ss.addEditors(emails); // ss.addEditors(emails.filter(email => email.split('@').pop() === 'gmail.com'));
               ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
 
               htmlTemplate.lodgeName = custSS[0];
