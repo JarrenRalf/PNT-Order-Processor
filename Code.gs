@@ -874,12 +874,19 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
 
         approvedEditors = ['jarrencralf@gmail.com', 'pntnoreply@gmail.com'];
         approvedEditors.push(...custSS[1].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
+
+        Logger.log(custSS[0] + ' Approved Editors:')
+        Logger.log(approvedEditors)
         
         currentEditors = ss.getEditors().map(user => {
           email = user.getEmail();
 
           if (!approvedEditors.includes(email)) // If an editor is not on the approved email list, then remove them
+          {
+            Logger.log('Editor removed from ' + custSS[0] + '\'s Order sheet: ' + email)
             ss.removeEditor(email);
+          }
+            
         });
 
         ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
