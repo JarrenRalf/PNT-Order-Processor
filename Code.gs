@@ -192,7 +192,7 @@ function createSSforSelectedCustomers()
     }
     else
     {
-      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
+      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, chart, chartTitleInfo, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
       const templateSS = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ');
       const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
       const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
@@ -254,8 +254,8 @@ function createSSforSelectedCustomers()
 
             velocityReportSheet.insertChart(chart);
             velocityReportSheet.protect();
-            chartSheet = ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
-            colours.length = 0; // Clear the background colouyrs array
+            ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
+            colours.length = 0; // Clear the background colours array
 
             customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]) // Customer invoice data
               .map((line, i, arr) => {
@@ -1155,7 +1155,7 @@ function updateCustomerName(range, value, spreadsheet)
  */
 function updateCustomerSpreadsheets()
 {
-  var splitDescription, newDescription, ss, d, velocityReportSheet, velocityReportSheetName, invoiceSheet, customerInvoiceData, itemList = [];
+  var splitDescription, newDescription, ss, d, numRows, velocityReportSheet, velocityReportSheetName, horizontalAligns, chart, chartTitleInfo, invoiceSheet, customerInvoiceData, itemList = [], colourSelector = true;
 
   try
   {
@@ -1237,13 +1237,29 @@ function updateCustomerSpreadsheets()
             .build();
 
           velocityReportSheet.insertChart(chart);
-          ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232').getSheetId();
+          velocityReportSheet.protect();
+          ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
+          colours.length = 0; // Clear the background colours array
 
-          customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]);
-            
-          invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')})
-          invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setValues(customerInvoiceData);
-          invoiceSheet.deleteColumn(2);
+          customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]) // Customer invoice data
+            .map((line, i, arr) => {
+
+              if (i === 0)
+                colourSelector = true;
+              else if (line[2].toString().trim() != arr[i - 1][2].toString().trim()) // If the current invoice number does not match the current one, then switch the background colours
+                colourSelector = !colourSelector;
+
+              colours.push((colourSelector) ? white : blue);
+              
+              return line;
+            })
+
+          invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')}).showSheet()
+          numRows = customerInvoiceData.length;
+          horizontalAligns = new Array(numRows).fill(['left', 'right', 'right', 'center', 'center', 'center', 'right', 'right']);
+
+          invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
+          invoiceSheet.deleteColumn(2).protect();
         }
     })
   }
