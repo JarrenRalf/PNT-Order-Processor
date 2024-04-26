@@ -856,8 +856,8 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
 
   try
   {
-    dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 2).map((custSS, i) => {
-      if (isNotBlank(custSS[0])) // Spreadsheet URL is not blank
+    dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 4).map((custSS, i) => {
+      if (isNotBlank(custSS[0]) && custSS[3]) // Spreadsheet URL is not blank and that the customer has already received their instructional email
       {
         ss = SpreadsheetApp.openByUrl(custSS[0]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
 
@@ -1055,7 +1055,7 @@ function shareSpreadsheetsWithSelectedUsers()
             {
               ss = SpreadsheetApp.openByUrl(custSS[0]);
               ss.addEditors(custSS[1].split(',').map(email => email.trim()));
-              ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()))
+              ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
               rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
             }
           })
