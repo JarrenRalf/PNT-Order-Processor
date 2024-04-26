@@ -375,7 +375,7 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
               ss = SpreadsheetApp.openByUrl(custSS[3]);
               emails = custSS[4].split(',').map(email => email.trim());
               ss.addEditors(emails); // ss.addEditors(emails.filter(email => email.split('@').pop() === 'gmail.com'));
-              ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
+              protectSpreadsheet(ss);
 
               htmlTemplate.lodgeName = custSS[0];
               htmlTemplate.pntOrderFormURL = custSS[3];
@@ -843,6 +843,30 @@ function isNotBlank(str)
 }
 
 /**
+ * This function sets all of the protections necessary to keep as much of the data and functionality safe in this sheet.
+ * 
+ * @param {Spreadsheeet} ss : The customer's spreadsheet.
+ * @author Jarren Ralf
+ */
+function protectSpreadsheet(ss)
+{
+  // Since the number of items change, we need to adjust some of the protected and unprotected ranges
+  var unprotectedRanges, lastRow = ss.getSheetByName('Item List').getLastRow();
+
+  ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => {
+    unprotectedRanges = protection.getUnprotectedRanges();
+
+    if (unprotectedRanges.length > 0)
+      protection.setUnprotectedRanges(unprotectedRanges.map(range => (range.getLastRow() > 5) ? range.offset(0, 0, lastRow, range.getNumColumns()) : range));
+
+    protection.removeEditors(protection.getEditors());
+    protection.addEditor('pntnoreply@gmail.com');
+  });
+
+  ss.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(protection => protection.setRange(protection.getRange().map(range => range.offset(0, 0, lastRow))));
+}
+
+/**
  * This function runs on a trigger every X and it removes any editors from the each customer spreadsheet that are not contained in the corresponding Customer Email(s) column on the Dashboard.
  * It also checks if the drawings are missing an assigned script, if they are, then it reassigns them.
  * 
@@ -889,7 +913,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
             
         });
 
-        ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
+        protectSpreadsheet(ss);
         dashboard.getRange(2 + i, 7).check(); // Check the box that signals if the spreadsheet is appropriately shared with the relevant emails
       }
     })
@@ -1055,7 +1079,7 @@ function shareSpreadsheetsWithSelectedUsers()
             {
               ss = SpreadsheetApp.openByUrl(custSS[0]);
               ss.addEditors(custSS[1].split(',').map(email => email.trim()));
-              ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => protection.removeEditors(protection.getEditors()));
+              protectSpreadsheet(ss);
               rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
             }
           })
