@@ -54,7 +54,10 @@ function onChange(e)
 
       for (var i = 0; i < customerInfo.length; i++)
         if (customerInfo[i][2]) // Check if the change has been made in the last 5 seconds
-          (dashboard.getRange(i + 2, 3).isChecked()) ? sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]) : sendCancelationEmail(customerInfo[i][0], customerInfo[i][3]);
+        {
+          dashboard.getRange(i + 2, 3).check(); // Check the checkbox to indicate that the user has an outstanding (unimported) order
+          sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]);
+        }
     }
   }
   catch (e)
@@ -192,8 +195,9 @@ function createSSforSelectedCustomers()
     }
     else
     {
-      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, chart, chartTitleInfo, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
-      const templateSS = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ');
+      var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, templateSheet, ordersSheet,
+      chart, chartTitleInfo, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
+      const templateSS = SpreadsheetApp.openById('1hhKeKpoheS71KuVCb9k1yPLq8PV41tIFsIj8U8VZUa4');
       const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
       const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
 
@@ -218,9 +222,10 @@ function createSSforSelectedCustomers()
         rng.offset(0, 1 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((customer, i) => {
           if (isNotBlank(customer[0]) && isNotBlank(customer[1]) && isBlank(customer[4])) // Both customer # and name are not blank, and the spreadsheet URL is blank
           {
+            dashboard.showColumns(4); // Show the column to make sure that the dashboard has authorization to use importrange on that spreadsheet 
             ss = templateSS.copy('PNT Order Sheet - ' + customer[1]); // Create the customers spreadsheet from the template spreadsheet
             ss.addEditor('pntnoreply@gmail.com'); // Add the pntnoreply email so that the emails can come from this account
-            ss.getSheetByName('Item Search').getRange(1, 2).setValue(customer[1]).offset(3, 2).setValue(customer[0]); // Set the customer name and customer #
+            ss.getSheetByName('Item Search').getRange(1, 2).setValue(customer[1]).offset(3, 1).setValue(customer[0]).offset(0, -1).setValue(''); // Set the customer name and customer # and remove timestamp (if there is one)
             velocityReportSheetName = customerList.find(custNum => custNum[0] === customer[0]); 
             lodgeSalesSS.getSheetByName(velocityReportSheetName[2]).copyTo(ss); // Take the "velocity report" from the Lodge Sales spreadsheet and put it on the customer's sheet
             velocityReportSheet = ss.getSheetByName('Copy of ' + velocityReportSheetName[2]).setName('Yearly Purchase Report');
@@ -268,17 +273,24 @@ function createSSforSelectedCustomers()
                 colours.push((colourSelector) ? white : blue);
                 
                 return line;
-              })
+            })
 
-            invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')}).showSheet()
             numRows = customerInvoiceData.length;
+            templateSheet = ss.getSheetByName('Template');
+            invoiceSheet = ss.insertSheet('Past Invoices', {template: templateSheet}).showSheet();
+            ss.getSheetByName('Export').clear(); // Just incase there is any data left on this page from the template SS
+            ordersSheet = ss.getSheetByName('Submitted Orders');
+            ordersSheet.getRange(2, 1, ordersSheet.getMaxRows() - 1, ordersSheet.getLastColumn()).clear();
+            //spreadsheet.deleteSheet(ss.getSheetByName('Template'));
             horizontalAligns = new Array(numRows).fill(['left', 'right', 'right', 'center', 'center', 'center', 'right', 'right']);
 
-            invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
+            if (numRows > 0)
+              invoiceSheet.getRange(2, 1, numRows, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
+
             invoiceSheet.deleteColumn(2).protect();
+            
             url = ss.getUrl();
-            customer[2] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!F2\")";
-            customer[3] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!B4\")";
+            customer[3] = "=IMPORTRANGE(INDIRECT(ADDRESS(ROW(), 5, 4)),\"Item Search!B4\")"; // Completed Date
             customer[4] = url;
 
             rng.offset(i, 1 - rng.getColumn(), 1, 5).setValues([customer]).offset(0, 6, 1, 2).uncheck();
@@ -360,7 +372,7 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
     {
       const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles(); // The inline gif images for the instructional email
       var htmlTemplate = HtmlService.createTemplateFromFile("Instructional Email"); // The email template
-      var ss, emails, file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null, 13: null};
+      var ss, emails, file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null};
       
       while (files.hasNext()) // Loop through the gifs
       {
@@ -374,13 +386,30 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
             {
               ss = SpreadsheetApp.openByUrl(custSS[3]);
               emails = custSS[4].split(',').map(email => email.trim());
-              ss.addEditors(emails); // ss.addEditors(emails.filter(email => email.split('@').pop() === 'gmail.com'));
+              Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
+
+              for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
+              {
+                try
+                {
+                  ss.addEditor(emails[email]);
+                  Logger.log('Successfully shared with: ' + emails[email])
+                }
+                catch (e)
+                {
+                  var error = e['stack'];
+                  Logger.log('*Unsuccessful*')
+                  Logger.log(error);
+                }
+              }
+
               protectSpreadsheet(ss);
 
               htmlTemplate.lodgeName = custSS[0];
               htmlTemplate.pntOrderFormURL = custSS[3];
-              htmlTemplate.invoiceDataURL = custSS[3] + '#' + ss.getSheetByName('Past Invoices').getSheetId();
-              htmlTemplate.velocityReportURL = custSS[3] + '#' + ss.getSheetByName('Yearly Purchase Report').getSheetId();
+              htmlTemplate.invoiceDataURL = custSS[3] + '#gid=' + ss.getSheetByName('Past Invoices').getSheetId();
+              htmlTemplate.velocityReportURL = custSS[3] + '#gid=' + ss.getSheetByName('Yearly Purchase Report').getSheetId();
+              htmlTemplate.createGoogleAccountURL = "https://support.google.com/accounts/answer/27441?hl=en";
 
               MailApp.sendEmail({
                 to: emails.join(","),
@@ -429,19 +458,19 @@ function formatAllCustomerSpreadsheets()
         maxRows = itemSearchSheet.getMaxRows() - 4;
 
         itemSearchSheet.getRange(5, 1, maxRows, itemSearchSheet.getMaxColumns()).setBorder(false, false, false, false, false, false) // The full range below the header
-            .setBackgrounds(new Array(maxRows).fill(['#cccccc', '#4a86e8', '#cccccc', '#cccccc', '#cccccc', 'white', '#cccccc', 'white', 'white']))
-            .setFontColors(new Array(maxRows).fill(['#434343', '#4a86e8', '#434343', '#434343', '#434343', 'black', '#434343', 'black', 'black']))
+            .setBackgrounds(new Array(maxRows).fill(['#cccccc', '#4a86e8', '#cccccc', '#cccccc', '#cccccc', 'white', 'white']))
+            .setFontColors(new Array(maxRows).fill(['#434343', '#4a86e8', '#434343', '#434343', '#434343', 'black', 'black']))
             .setFontFamily('Arial')
             .setFontLine('none')
             .setFontSize(10)
             .setFontStyle('normal')
             .setFontWeight('bold')
-            .setHorizontalAlignments(new Array(maxRows).fill(['left', 'center', 'center', 'center', 'center', 'center', 'center', 'left', 'left']))
+            .setHorizontalAlignments(new Array(maxRows).fill(['left', 'center', 'center', 'center', 'center', 'left', 'left']))
             .setNumberFormat('@')
             .setVerticalAlignment('middle')
             .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
-          .offset( 0, 1, maxRows, 1).setBorder(false, true, false, true, null, false, '#1155cc', SpreadsheetApp.BorderStyle.SOLID_THICK) // The vertical blue line below the header
-          .offset(-3, 4, 1, 3).setBorder(false, false, false, false, false, null) // The checkbox, timestamp, and item information display
+          .offset(-1, 1, maxRows, 1).setBorder(false, true, false, true, null, false, '#1155cc', SpreadsheetApp.BorderStyle.SOLID_THICK) // The vertical blue line below the header
+          .offset(-2, 2, 1, 3).setBorder(false, false, false, false, false, null) // The checkbox, timestamp, and item information display
             .setBackground('#4a86e8')
             .setFontColors([['white', 'white', '#ffff00']])
             .setFontFamily('Arial')
@@ -509,265 +538,61 @@ function getExportData()
     }
     else
     {
-      var ss, itemSearchSheet, range, numRows, numItems, recentlyCreatedSheet, recentlyCreatedItems, deliveryInstructions, itemPricing, isQCL = false, exportData = [], exportData_WithDiscountedPrices = [];
+      var exportRange, itemPricing, exportData_WithDiscountedPrices = [];
       const numSS = dashboard.getLastRow() - 1;
       const dashboardRange = dashboard.getRange(2, 1, numSS, 5);
+
+      const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages')
+      const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
+      const BASE_PRICE = 1;
+      var PRICE, index;
 
       dashboardRange.getValues().map((customer, c) => {
         if (dashboard.getRange(c + 2, 3).isChecked())
         {
-          ss = SpreadsheetApp.openByUrl(customer[4]);
-          itemSearchSheet = ss.getSheetByName('Item Search');
-          recentlyCreatedSheet = ss.getSheetByName('Recently Created');
-          numItems = recentlyCreatedSheet.getLastRow();
-          recentlyCreatedItems = recentlyCreatedSheet.getSheetValues(1, 1, numItems, 1);
-          numRows = Math.max(getLastRowSpecial(itemSearchSheet.getSheetValues(1, 8, itemSearchSheet.getMaxRows(), 1)), // Description column
-                            getLastRowSpecial(itemSearchSheet.getSheetValues(1, 9, itemSearchSheet.getMaxRows(), 1))) // Item / General Order Notes column
-                    - 3; 
-          range = itemSearchSheet.getRange(4, 3, numRows, 7);
-          deliveryInstructions = itemSearchSheet.getSheetValues(2, 9, 1, 1)[0][0];
+          PRICE = (customer[0] !== 'DL1015') ? 4 : 3;
+          exportRange = SpreadsheetApp.openByUrl(customer[4]).getSheetByName('Export').getDataRange();
 
-          /* If there are delivery instructions, make them the final line of the order.
-          * If necessary, make multiple comment lines if comments are > 75 characters long.
-          */
-          exportData.push(...range.getValues(), // The SKUs and quantities
-            ['I', 'Provide your preferred delivery / pick up date and location below:', '', ''],
-            ...(isNotBlank(deliveryInstructions)) ? deliveryInstructions.match(/.{1,75}/g).map(c => ['I', c, '', '']) : [['I', '**Customer left this field blank**', '', '']]);
-
-          range.offset(1, 0, numRows - 1).clearContent() // Clear the customers order, including notes
-            .offset(-4, 5, 1, 1).setValue('')            // Remove the Customer PO #
-            .offset( 1, 0, 1, 2).setValues([['Items displayed in order of newest to oldest.', '']]) // Remove the Delivery / Pick Up instructions
-            .offset(0, -2).uncheck()                     // Uncheck the submit order checkbox
-            .offset(-1, -5, 2, 1).setValue('')           // Remove the words from the search box
-            .offset( 3,  1, 1, 1).setValue('')           // Remove the hidden timestamp
-            .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 1).clearContent() // Clear the full search range
-            .offset(0, 0, numItems).setValues(recentlyCreatedItems); // Place the recently created items on the search page
-
-          spreadsheet.toast(customer[1] + '\'s spreadsheet has been reset.')
-        }
-      })
-
-      const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages')
-      const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
-      const BASE_PRICE = 1, LODGE_PRICE = 3, WHOLESALE_PRICE = 4;
-
-      exportData.map(item => {
-        if (item[0] === 'H')
-        {
-          isQCL = (item[1] === 'DL1015') ? true : false;
-          exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
-        }
-        else if (item[0] === 'I')
-          exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
-        else if (item[0] === 'D')
-        {
-          item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
-
-          if (isNotBlank(item[1])) // SKU is not blank
-          {
-            if (isNotBlank(item[3])) // Order quantity is not blank
-            {
-              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-              {
-                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-                if (itemPricing == undefined) // SKU is assumed to be invalid
-                  exportData_WithDiscountedPrices.push(
-                    ['D', 'MISCITEM', 0, item[3]], 
-                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                  )
-                else // SKU is assumed to be valid
-                {
-                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                  exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
-                }
-              }
-              else // Order quantity is not a valid number
-              {
-                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-                if (itemPricing == undefined) // SKU is assumed to be invalid
-                  exportData_WithDiscountedPrices.push(
-                    ['D', 'MISCITEM', 0, 0], 
-                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                  )
-                else // SKU is assumed to be valid
-                {
-                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                  exportData_WithDiscountedPrices.push(
-                    ['D', item[1], item[2], 0], 
-                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
-                  )
-                }
-              }
-            }
-            else // The order quantity is blank (while SKU is not)
+          exportRange.getValues().map(item => {
+            if (item[0] === 'H') // Header line
+              exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
+            else if (item[0] === 'I') // Comment line
+              exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
+            else if (item[0] === 'D') // Detail line
             {
               itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
 
               if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
+                exportData_WithDiscountedPrices.push(['D', 'MISCITEM', 0, item[3]], ['C', 'SKU Not Found: ' + item[1] + ' therefore it was replaced with MISCITEM', '', ''])
               else // SKU is assumed to be valid
               {
-                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
+                if (itemPricing[BASE_PRICE] != 0 && itemPricing[PRICE] != 0)
+                  item[2] = (itemPricing[BASE_PRICE]*(100 - itemPricing[PRICE])/100).toFixed(2); // Set the pricing
 
-                exportData_WithDiscountedPrices.push(
-                  ['D', item[1], item[2], 0],
-                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
-                )
+                exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
               }
             }
-          }
-          else // The SKU is blank
-          {
-            if (isNotBlank(item[3])) // Order quantity is not blank
+            else if (item[0] === 'C') // Comment line
             {
-              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
+              if (item[1].split('Description: ').length === 2)
               {
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, item[3]], 
-                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
+                index = 1;
+
+                while (exportData_WithDiscountedPrices[exportData_WithDiscountedPrices.length - index][0] === 'C')
+                  index++;
+
+                if (exportData_WithDiscountedPrices[exportData_WithDiscountedPrices.length - index][1] === 'MISCITEM')
+                  exportData_WithDiscountedPrices.push(['C', item[1], '', '']) // Only keep the Description comment if the item is a MISCITEM
               }
-              else // Order quantity is not a valid number
-              {
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              }
+              else
+                exportData_WithDiscountedPrices.push(['C', item[1], '', ''])
             }
-            else // The order quantity is blank 
-            {
-              if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
-              {
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              }
-            }
-          }
+          })
 
-          if (isNotBlank(item[6])) // There are notes for the current line
-            exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
-        }
-        else // There was no line indicator
-        {
-          item[1] = item[1].toString().trim().toUpperCase(); // Make the SKU uppercase
-
-          if (isNotBlank(item[1])) // SKU is not blank
-          {
-            if (isNotBlank(item[3])) // Order quantity is not blank
-            {
-              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-              {
-                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-                if (itemPricing == undefined) // SKU is assumed to be invalid
-                  exportData_WithDiscountedPrices.push(
-                    ['D', 'MISCITEM', 0, item[3]], 
-                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                  )
-                else // SKU is assumed to be valid
-                {
-                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                  exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
-                }
-              }
-              else // Order quantity is not a valid number
-              {
-                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-                if (itemPricing == undefined) // SKU is assumed to be invalid
-                  exportData_WithDiscountedPrices.push(
-                    ['D', 'MISCITEM', 0, 0], 
-                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                    ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                  )
-                else // SKU is assumed to be valid
-                {
-                  if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                    item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                  exportData_WithDiscountedPrices.push(
-                    ['D', item[1], item[2], 0], 
-                    ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', '']
-                  )
-                }
-              }
-            }
-            else // The order quantity is blank (while SKU is not)
-            {
-              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-              if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                  ...('SKU Not Found: ' + item[1] + ' - ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              else // SKU is assumed to be valid
-              {
-                if (itemPricing[BASE_PRICE] != 0 && ((isQCL && itemPricing[WHOLESALE_PRICE] != 0) || itemPricing[LODGE_PRICE] != 0))
-                  item[2] = (isQCL) ? (itemPricing[BASE_PRICE]*(100 - itemPricing[WHOLESALE_PRICE])/100).toFixed(2) : (itemPricing[BASE_PRICE]*(100 - itemPricing[LODGE_PRICE])/100).toFixed(2); // Set the pricing
-
-                exportData_WithDiscountedPrices.push(
-                  ['D', item[1], item[2], 0],
-                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', '']
-                )
-              }
-            }
-          }
-          else // The SKU is blank
-          {
-            if (isNotBlank(item[3])) // Order quantity is not blank
-            {
-              if (Number(item[3]).toString() !== 'NaN') // Order number is a valid number
-              {
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, item[3]], 
-                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              }
-              else // Order quantity is not a valid number
-              {
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Invalid order QTY: "' + item[3] + '" for above item, therefore it was replaced with 0', '', ''], 
-                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              }
-            }
-            else // The order quantity is blank 
-            {
-              if (isNotBlank(item[5])) // Description is not blank (but SKU and quantity are)
-              {
-                exportData_WithDiscountedPrices.push(
-                  ['D', 'MISCITEM', 0, 0], 
-                  ['C', 'Order quantity was blank for the above item, therefore it was replaced with 0', '', ''],
-                  ...('Description: ' + item[5] + ' - ' + item[4]).toString().match(/.{1,75}/g).map(c => ['C', c, '', ''])
-                )
-              }
-            }
-          }
-
-          if (isNotBlank(item[6])) // There are notes for the current line
-            exportData_WithDiscountedPrices.push(...('Notes: ' + item[6]).match(/.{1,75}/g).map(c => ['C', c, '', '']))
+          exportRange.clear();
+          dashboard.getRange(c + 2, 3).uncheck();
+          SpreadsheetApp.flush();
+          spreadsheet.toast(customer[1] + '\'s export page has been cleared.')
         }
       })
 
@@ -795,27 +620,6 @@ function getExportData()
     var error = e['stack'];
     throw new Error(error);
   }
-}
-
-/**
- * Gets the last row number based on a selected column range values
- *
- * @param {array} range : takes a 2d array of a single column's values
- * @returns {number} : the last row number with a value. 
- */ 
-function getLastRowSpecial(range)
-{
-  for (var row = 0, rowNum = 0, blank = false; row < range.length; row++)
-  {
-    if (isBlank(range[row][0]) && !blank)
-    {
-      rowNum = row;
-      blank = true;
-    }
-    else if(isNotBlank(range[row][0]))
-      blank = false;
-  }
-  return rowNum;
 }
 
 /**
@@ -863,7 +667,7 @@ function protectSpreadsheet(ss)
     protection.addEditor('pntnoreply@gmail.com');
   });
 
-  ss.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(protection => protection.setRange(protection.getRange().map(range => range.offset(0, 0, lastRow))));
+  ss.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(protection => {protection.setRange(protection.getRange().offset(0, 0, lastRow))});
 }
 
 /**
@@ -880,10 +684,10 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
 
   try
   {
-    dashboard.getSheetValues(2, 5, dashboard.getLastRow() - 1, 4).map((custSS, i) => {
-      if (isNotBlank(custSS[0]) && custSS[3]) // Spreadsheet URL is not blank and that the customer has already received their instructional email
+    dashboard.getSheetValues(2, 2, dashboard.getLastRow() - 1, 7).map((custSS, i) => {
+      if (isNotBlank(custSS[3]) && custSS[6]) // Spreadsheet URL is not blank and that the customer has already received their instructional email
       {
-        ss = SpreadsheetApp.openByUrl(custSS[0]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
+        ss = SpreadsheetApp.openByUrl(custSS[3]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
 
         // These are the drawings that are used as buttons for the users
         drawings = ss.getSheetByName('Item Search').getDrawings().map(drawing => {
@@ -897,17 +701,32 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
           drawings[1].button.setOnAction((drawings[1].x < drawings[0].x && drawings[1].w < drawings[0].w) ? 'allItems' : 'addSelectedItemsToOrder');
 
         approvedEditors = ['jarrencralf@gmail.com', 'pntnoreply@gmail.com'];
-        approvedEditors.push(...custSS[1].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
+        approvedEditors.push(...custSS[4].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
 
-        Logger.log(custSS[0] + ' Approved Editors:')
+        Logger.log(custSS[0] + ' approved editors:')
         Logger.log(approvedEditors)
-        
+
+        for (var editor = 0; editor < approvedEditors.length; editor++) // Loop through all of the employee emails and share with them individually to avoid errors
+        {
+          try
+          {
+            ss.addEditor(approvedEditors[editor]);
+            Logger.log('Successfully shared with: ' + approvedEditors[editor])
+          }
+          catch (e)
+          {
+            var error = e['stack'];
+            Logger.log('*Unsuccessful*')
+            Logger.log(error);
+          }
+        }
+
         currentEditors = ss.getEditors().map(user => {
           email = user.getEmail();
 
           if (!approvedEditors.includes(email)) // If an editor is not on the approved email list, then remove them
           {
-            Logger.log('Editor removed from ' + custSS[0] + '\'s Order sheet: ' + email)
+            Logger.log('**Editor removed from ' + custSS[0] + '\'s Order sheet: ' + email)
             ss.removeEditor(email);
           }
             
@@ -915,6 +734,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
 
         protectSpreadsheet(ss);
         dashboard.getRange(2 + i, 7).check(); // Check the box that signals if the spreadsheet is appropriately shared with the relevant emails
+        Logger.log('------------------------------------------------------------------------------------------------------------------------------------------------------------')
       }
     })
   }
@@ -930,58 +750,21 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
  * 
  * @author Jarren Ralf
  */
-function sendCancelationEmail(name, ssUrl)
-{
-  const spreadsheet = SpreadsheetApp.openByUrl(ssUrl);
-  const itemSearchSheet = spreadsheet.getSheetByName('Item Search');
-  const poNum = itemSearchSheet.getSheetValues(1, 8, 1, 1)[0][0];
-  const isPoNotBlank = isNotBlank(poNum);
-  const customerEmails = spreadsheet.getEditors().map(editor => editor.getEmail()).filter(email => email !== 'jarrencralf@gmail.com' && email !== 'pntnoreply@gmail.com').join(', ');
-
-  // Send an email to the PNT employees with the new order
-  MailApp.sendEmail({
-    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
-    replyTo: customerEmails,
-    name: 'PNT Sales',
-    subject: (isPoNotBlank) ? name + " has cancelled their order, PO # " + poNum : name + " has cancelled their order",
-    htmlBody: "<p>Reply to this email if you want to contact the customer.</p>"
-  });
-
-  // Send an email confirmation to the customer
-  MailApp.sendEmail({
-    to: customerEmails, // Send a confirmation to all of the editors, except me
-    replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
-    name: 'PNT Sales',
-    subject: (isPoNotBlank) ? "Order Cancellation for PO # " + poNum : "Order Cancellation",
-    htmlBody: "<p>Your order has been successfully cancelled.</p><p><br></p><p>Reply to this email if you would like to contact the Lodge Sales team at Pacific Net & Twine.</p><p>Thank you.</p>"
-  });
-}
-
-/**
- * This function sends an email to all of the relevant PNT Lodge employees with the items and notes that the customer ordered.
- * 
- * @author Jarren Ralf
- */
 function sendConfirmationEmail(name, ssUrl)
 {
   const spreadsheet = SpreadsheetApp.openByUrl(ssUrl);
-  const itemSearchSheet = spreadsheet.getSheetByName('Item Search');
-  const poNum = itemSearchSheet.getSheetValues(1, 8, 1, 1)[0][0];
-  const isPoNotBlank = isNotBlank(poNum);
-  const dateAndLocationForDelivery = itemSearchSheet.getSheetValues(2, 9, 1, 1)[0][0];
-  const isDateAndLocationNotBlank = isNotBlank(dateAndLocationForDelivery);
-  const numRows = Math.max(getLastRowSpecial(itemSearchSheet.getSheetValues(1, 8, itemSearchSheet.getMaxRows(), 1)), // Description column
-                           getLastRowSpecial(itemSearchSheet.getSheetValues(1, 9, itemSearchSheet.getMaxRows(), 1))) // Item / General Order Notes column
-                  - 4;
-  var values = itemSearchSheet.getSheetValues(5, 4, numRows, 6)
-  values.map(arr => {arr.splice(1, 1)}) // Remove the pricing (it's all $0.00 anyways)
+  const lastExportSheet = spreadsheet.getSheetByName('Last Export');
+  const numRows = lastExportSheet.getLastRow() - 1;
+  const values = lastExportSheet.getSheetValues(1, 1, numRows + 1, 5)
+  const orderInfo = values.shift(); // Includes PO number and Delivery Instructions
+  const isPoNotBlank = isNotBlank(orderInfo[3]);
   const numCols = values[0].length;
   const customerEmails = spreadsheet.getEditors().map(editor => editor.getEmail()).filter(email => email !== 'jarrencralf@gmail.com' && email !== 'pntnoreply@gmail.com').join(', ');
 
   var body = "<table><tr><th colspan=\"" 
     + numCols + "\">Provide your preferred delivery / pick up date and location below:</th></tr><tr><th colspan=\"" 
     + numCols + "\">" 
-    + ((isDateAndLocationNotBlank) ? dateAndLocationForDelivery : "**Customer left this field blank**") 
+    + ((isNotBlank(orderInfo[4])) ? orderInfo[4] : "**Customer left this field blank**") 
     + "</th></tr><tr><th colspan=\"" 
     + numCols + "\"><br></th></tr><tr><th>Item Number</th><th>Qty</th><th>UoM</th><th>Description</th><th>Item / General Order Notes</th></tr>";
 
@@ -1002,10 +785,10 @@ function sendConfirmationEmail(name, ssUrl)
 
   // Send an email to the PNT employees with the new order
   MailApp.sendEmail({
-    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com", 
+    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
     replyTo: customerEmails,
     name: 'PNT Sales',
-    subject: (isPoNotBlank) ? name + " has placed an order, PO # " + poNum : name + " has placed an order!",
+    subject: (isPoNotBlank) ? name + " has placed an order, PO # " + orderInfo[3] : name + " has placed an order!",
     htmlBody: body
   });
 
@@ -1019,7 +802,7 @@ function sendConfirmationEmail(name, ssUrl)
     to: customerEmails, // Send a confirmation to all of the editors, except me
     replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
     name: 'PNT Sales',
-    subject: (isPoNotBlank) ? "Order Confirmation for PO # " + poNum : "Order Confirmation",
+    subject: (isPoNotBlank) ? "Order Confirmation for PO # " + orderInfo[3] : "Order Confirmation",
     htmlBody: body
   });
 }
@@ -1071,14 +854,31 @@ function shareSpreadsheetsWithSelectedUsers()
     }
     else
     {
-      var ss;
+      var ss, emails;
 
       dashboard.getActiveRangeList().getRanges().map(rng => {
-        rng.offset(0, 5 - rng.getColumn(), rng.getNumRows(), 2).getValues().map((custSS, i) => {
-            if (isNotBlank(custSS[0]) && isNotBlank(custSS[1]))
+        rng.offset(0, 2 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((custSS, i) => {
+            if (isNotBlank(custSS[3]) && isNotBlank(custSS[4]))
             {
-              ss = SpreadsheetApp.openByUrl(custSS[0]);
-              ss.addEditors(custSS[1].split(',').map(email => email.trim()));
+              ss = SpreadsheetApp.openByUrl(custSS[3]);
+              emails = custSS[4].split(',').map(email => email.trim())
+              Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
+
+              for (var i = 0; i < emails.length; i++) // Loop through all of the employee emails and share with them individually to avoid errors
+              {
+                try
+                {
+                  ss.addEditor(emails[i]);
+                  Logger.log('Successfully shared with: ' + emails[i])
+                }
+                catch (e)
+                {
+                  var error = e['stack'];
+                  Logger.log('*Unsuccessful*')
+                  Logger.log(error);
+                }
+              }
+
               protectSpreadsheet(ss);
               rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
             }
@@ -1104,36 +904,6 @@ function shareSpreadsheetsWithSelectedUsers()
 function sortByCreatedDate(a, b)
 {
   return (a[1] === b[1]) ? 0 : (a[1] < b[1]) ? 1 : -1;
-}
-
-/**
- * This function is a test of the instructional email.
- * 
- * @author Jarren Ralf
- */
-function testSendInstructionalEmail()
-{
-  const htmlTemplate = HtmlService.createTemplateFromFile("Instructional Email");
-  const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles();
-  var file, emailImages = {1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null, 8: null, 9: null, 10: null, 11: null, 12: null, 13: null};
-  htmlTemplate.lodgeName = 'QCL'
-  htmlTemplate.pntOrderFormURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
-  htmlTemplate.velocityReportURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
-  htmlTemplate.invoiceDataURL = 'https://docs.google.com/spreadsheets/d/1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ/edit' // Template
-
-  while (files.hasNext())
-  {
-    file = files.next();
-    emailImages[file.getName().split('_', 1)[0]] = file.getAs("image/gif"); 
-  }
-  
-  MailApp.sendEmail({
-    to: "lb_blitz_allstar@hotmail.com,eryn@pacificnetandtwine.com",
-    name: "Jarren Ralf",
-    subject: "Hey Eryn, Thanks for the input! How does this look? Any more suggestions?",
-    htmlBody: htmlTemplate.evaluate().getContent(),
-    inlineImages: emailImages
-  });
 }
 
 /**
@@ -1179,7 +949,8 @@ function updateCustomerName(range, value, spreadsheet)
  */
 function updateCustomerSpreadsheets()
 {
-  var splitDescription, newDescription, ss, d, numRows, velocityReportSheet, velocityReportSheetName, horizontalAligns, chart, chartTitleInfo, invoiceSheet, customerInvoiceData, itemList = [], colourSelector = true;
+  var splitDescription, newDescription, ss, d, numRows, velocityReportSheet, velocityReportSheetName, horizontalAligns, 
+  customerName, chart, chartTitleInfo, invoiceSheet, customerInvoiceData, itemList = [], colours = [], colourSelector = true;
 
   try
   {
@@ -1199,6 +970,7 @@ function updateCustomerSpreadsheets()
     const customerList = customerListSheet.getSheetValues(3, 1, customerListSheet.getLastRow() - 2, 3);
     const numYears = new Date().getFullYear() - 2011;
     const CUST_NAME = 0, SALES_TOTAL = 2;
+    const white = ['white', 'white', 'white', 'white', 'white', 'white', 'white', 'white'], blue = ['#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8', '#c9daf8'];
 
     invoiceData.shift() // Remove the header
 
@@ -1217,14 +989,16 @@ function updateCustomerSpreadsheets()
     // Remove the headers
     itemList.shift();
     sortedItems.shift();
+    const numItems = itemList.length;
 
     dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 5).getValues()
       .map(customer => {
         if (isNotBlank(customer[4]))
         {
+          Logger.log('Updating ' + customer[1] + '\'s spreadsheet...')
           ss = SpreadsheetApp.openByUrl(customer[4])
-          ss.getSheetByName('Item List').getRange(1, 1, itemList.length).setValues(itemList);
-          ss.getSheetByName('Recently Created').getRange(1, 1, itemList.length).setValues(sortedItems);
+          ss.getSheetByName('Item List').hideSheet().getRange(1, 1, numItems).setValues(itemList);
+          ss.getSheetByName('Recently Created').hideSheet().getRange(1, 1, numItems).setValues(sortedItems);
           ss.deleteSheet(ss.getSheetByName('Yearly Purchase Report'));
           ss.deleteSheet(ss.getSheetByName('Chart'));
           ss.deleteSheet(ss.getSheetByName('Past Invoices'));
@@ -1264,8 +1038,9 @@ function updateCustomerSpreadsheets()
           velocityReportSheet.protect();
           ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
           colours.length = 0; // Clear the background colours array
+          customerName = velocityReportSheetName[1].toUpperCase();
 
-          customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]) // Customer invoice data
+          customerInvoiceData = invoiceData.filter(name => name[1].toUpperCase() === customerName) // Customer invoice data
             .map((line, i, arr) => {
 
               if (i === 0)
@@ -1278,12 +1053,19 @@ function updateCustomerSpreadsheets()
               return line;
             })
 
-          invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template')}).showSheet()
+          invoiceSheet = ss.insertSheet('Past Invoices', {template: ss.getSheetByName('Template').hideSheet()}).showSheet()
+          ss.getSheetByName('Export').hideSheet();
+          ss.getSheetByName('Last Export').hideSheet();
+          ss.getSheetByName('Template').hideSheet();
+          ss.getSheetByName('Submitted Orders').showSheet();
+
           numRows = customerInvoiceData.length;
           horizontalAligns = new Array(numRows).fill(['left', 'right', 'right', 'center', 'center', 'center', 'right', 'right']);
 
-          invoiceSheet.getRange(2, 1, customerInvoiceData.length, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
+          invoiceSheet.getRange(2, 1, numRows, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
           invoiceSheet.deleteColumn(2).protect();
+          Logger.log(customer[1] + ' spreadsheet update complete.')
+          Logger.log('------------------------------------------------------------------------------------------------------------------------------------------------------------')
         }
     })
   }
@@ -1306,7 +1088,7 @@ function updateOrderSheet_TEMPLATE()
 
   try
   {
-    const spreadsheet = SpreadsheetApp.openById('1SN4H5_eEIYGvT2MrDIpusazpRePDVOdgI2hJlqEzULQ') // The template spreadsheet
+    const spreadsheet = SpreadsheetApp.openById('1hhKeKpoheS71KuVCb9k1yPLq8PV41tIFsIj8U8VZUa4') // The template spreadsheet
     const sortedItems = Utilities.parseCsv(DriveApp.getFilesByName("inventory.csv").next().getBlob().getDataAsString()).map(item => {
       splitDescription = item[1].split(' - ');
       splitDescription.splice(-4, 1);
@@ -1324,15 +1106,20 @@ function updateOrderSheet_TEMPLATE()
     sortedItems.shift();
     const numItems = itemList.length;
     const itemSearchSheet = spreadsheet.getSheetByName('Item Search');
-    spreadsheet.getSheetByName('Item List').getRange(1, 1, numItems).setValues(itemList);
-    spreadsheet.getSheetByName('Recently Created').getRange(1, 1, numItems).setValues(sortedItems);
+    const ordersSheet = ss.getSheetByName('Submitted Orders').showSheet();
+    spreadsheet.getSheetByName('Export').clearContents().hideSheet();
+    spreadsheet.getSheetByName('Last Export').clearContents().hideSheet();
+    spreadsheet.getSheetByName('Item List').hideSheet().getRange(1, 1, numItems).setValues(itemList);
+    spreadsheet.getSheetByName('Recently Created').hideSheet().getRange(1, 1, numItems).setValues(sortedItems);
+    spreadsheet.getSheetByName('Template').hideSheet();
+    ordersSheet.getRange(2, 1, ordersSheet.getMaxRows() - 1, ordersSheet.getLastColumn()).clear();
     itemSearchSheet.getRange(1, 1).setValue('') // The search box
-      .offset(0,  7).setValue('') // PO #
+      .offset(0,  5).setValue('') // PO #
       .offset(1,  0).setValue('Items displayed in order of newest to oldest.') // Display message
       .offset(0,  1).setValue('') // Delivery Instructions
       .offset(0, -3).uncheck()    // Uncheck the Submission Box
-      .offset(2, -4).setValue('') // Remove the hidden timestamp
-      .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 9).clearContent() // Clear the previous items and any order information
+      .offset(2, -2).setValue('') // Remove the hidden timestamp
+      .offset(1, -1, itemSearchSheet.getMaxRows() - 4, 7).clearContent() // Clear the previous items and any order information
       .offset(0,  0, numItems, 1).setValues(sortedItems) // Set the recent items on the sheet
   }
   catch (e)
@@ -1349,6 +1136,7 @@ function updateOrderSheet_TEMPLATE()
  * @param {Event Object} e   : The event object
  * @param     {Range}  range : The range that was editted
  * @param    {String}  value : The value in the cell that was inputted
+ * @author Jarren Ralf
  */
 function updatePrice(e, range, value)
 {
