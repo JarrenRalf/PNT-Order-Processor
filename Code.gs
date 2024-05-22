@@ -191,8 +191,10 @@ function createSSforSelectedCustomers()
     if (dashboard.getSheetName() !== 'Dashboard')
     {
       spreadsheet.getSheetByName('Dashboard').activate();
-      Browser.msgBox('Please select the customers that you wish to create spreadsheets for.')
+      Browser.msgBox('Please select the customers that you wish to create spreadsheets for.');
     }
+    else if (Session.getActiveUser().getEmail() !== 'pntnoreply@gmail.com')
+      Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
     else
     {
       var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, templateSheet, ordersSheet,
@@ -308,35 +310,24 @@ function createSSforSelectedCustomers()
 }
 
 /**
- * Creates triggers only if the jarrencralf account runs this function.
- * 
- * @author Jarren Ralf
- */
-function createTriggers()
-{
-  if (Session.getActiveUser().getEmail() !== 'jarrencralf@gmail.com')
-    Browser.msgBox('This function can only be run by the jarrencralf@gmail account.');
-  else
-  {
-    ScriptApp.newTrigger('updateCustomerSpreadsheets').timeBased().atHour(23).everyDays(1).create();
-    ScriptApp.newTrigger('updateOrderSheet_TEMPLATE').timeBased().atHour(23).everyDays(1).create();
-    ScriptApp.newTrigger('removeUnapprovedEditorsFromCustomerSpreadsheet').timeBased().everyHours(1).create();
-    ScriptApp.newTrigger('formatAllCustomerSpreadsheets').timeBased().everyDays(1).atHour(3).create();
-    ScriptApp.newTrigger('installedOnEdit').forSpreadsheet('1MVL3lRDKrTa1peqBCjlS9GMAysdOD13_Sl0ygYb8VpE').onEdit().create();
-  }
-}
-
-/**
  * Creates the onChange trigger only if the pntnoreply account runs this function.
  * 
  * @author Jarren Ralf
  */
-function createTrigger_OnChange_ByPntNoReplyGmail()
+function createTriggers_ByPntNoReplyGmail()
 {
   if (Session.getActiveUser().getEmail() !== 'pntnoreply@gmail.com')
     Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
   else
-    ScriptApp.newTrigger('onChange').forSpreadsheet('1MVL3lRDKrTa1peqBCjlS9GMAysdOD13_Sl0ygYb8VpE').onChange().create();
+  {
+    const ssId = SpreadsheetApp.getActive().getId();
+    ScriptApp.newTrigger('onChange').forSpreadsheet(ssId).onChange().create();
+    ScriptApp.newTrigger('installedOnEdit').forSpreadsheet(ssId).onEdit().create();
+    ScriptApp.newTrigger('updateCustomerSpreadsheets').timeBased().atHour(23).everyDays(1).create();
+    ScriptApp.newTrigger('updateOrderSheet_TEMPLATE').timeBased().atHour(23).everyDays(1).create();
+    ScriptApp.newTrigger('removeUnapprovedEditorsFromCustomerSpreadsheet').timeBased().everyHours(1).create();
+    ScriptApp.newTrigger('formatAllCustomerSpreadsheets').timeBased().everyDays(1).atHour(3).create();
+  }
 }
 
 /**
@@ -656,12 +647,21 @@ function protectSpreadsheet(ss)
 {
   // Since the number of items change, we need to adjust some of the protected and unprotected ranges
   var unprotectedRanges, lastRow = ss.getSheetByName('Item List').getLastRow();
+  Logger.log(lastRow);
+  Logger.log(ss.getName());
+  Logger.log(ss.getProtections(SpreadsheetApp.ProtectionType.SHEET));
 
   ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => {
+    Logger.log(protection.getDescription());
     unprotectedRanges = protection.getUnprotectedRanges();
+    Logger.log(unprotectedRanges);
 
     if (unprotectedRanges.length > 0)
+    {
+      Logger.log(unprotectedRanges.getA1Notation());
       protection.setUnprotectedRanges(unprotectedRanges.map(range => (range.getLastRow() > 5) ? range.offset(0, 0, lastRow, range.getNumColumns()) : range));
+    }
+      
 
     protection.removeEditors(protection.getEditors());
     protection.addEditor('pntnoreply@gmail.com');
@@ -700,8 +700,8 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
         if (drawings[1].isScriptNotAssigned) // If Script is missing, then assign it back to the button
           drawings[1].button.setOnAction((drawings[1].x < drawings[0].x && drawings[1].w < drawings[0].w) ? 'allItems' : 'addSelectedItemsToOrder');
 
-        approvedEditors = ['jarrencralf@gmail.com', 'pntnoreply@gmail.com'];
-        approvedEditors.push(...custSS[4].split(',').map(email => email.trim())); // Get the list of approved editors and add it to jarrencralf@gmail and pntnoreply@gmail
+        approvedEditors = ['pntnoreply@gmail.com'];
+        approvedEditors.push(...custSS[4].split(',').map(email => email.trim())); // Get the list of approved editors and add it to pntnoreply@gmail.com
 
         Logger.log(custSS[0] + ' approved editors:')
         Logger.log(approvedEditors)
@@ -759,7 +759,7 @@ function sendConfirmationEmail(name, ssUrl)
   const orderInfo = values.shift(); // Includes PO number and Delivery Instructions
   const isPoNotBlank = isNotBlank(orderInfo[3]);
   const numCols = values[0].length;
-  const customerEmails = spreadsheet.getEditors().map(editor => editor.getEmail()).filter(email => email !== 'jarrencralf@gmail.com' && email !== 'pntnoreply@gmail.com').join(', ');
+  const customerEmails = spreadsheet.getEditors().map(editor => editor.getEmail()).filter(email => email !== 'pntnoreply@gmail.com').join(', ');
 
   var body = "<table><tr><th colspan=\"" 
     + numCols + "\">Provide your preferred delivery / pick up date and location below:</th></tr><tr><th colspan=\"" 
