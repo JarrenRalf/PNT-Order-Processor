@@ -198,7 +198,7 @@ function createSSforSelectedCustomers()
     else
     {
       var ss, url, velocityReportSheet, velocityReportSheetName, customerInvoiceData, invoiceSheet, templateSheet, ordersSheet,
-      chart, chartTitleInfo, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
+      customerName, chart, chartTitleInfo, splitDescription, colours = [], numRows, horizontalAligns, colourSelector = true;
       const templateSS = SpreadsheetApp.openById('1hhKeKpoheS71KuVCb9k1yPLq8PV41tIFsIj8U8VZUa4');
       const lodgeSalesSS = SpreadsheetApp.openById('1o8BB1RWkxK1uo81tBjuxGc3VWArvCdhaBctQDssPDJ0');
       const invoiceDataSheet = SpreadsheetApp.openById('1xKw4GAtNbAsTEodCDmCMbPCbXUlK9OHv0rt5gYzqx9c').getSheetByName('All Data');
@@ -263,8 +263,9 @@ function createSSforSelectedCustomers()
             velocityReportSheet.protect();
             ss.moveChartToObjectSheet(chart).setName('Chart').setTabColor('#f1c232');
             colours.length = 0; // Clear the background colours array
+            customerName = velocityReportSheetName[1].toUpperCase();
 
-            customerInvoiceData = invoiceData.filter(name => name[1] === velocityReportSheetName[1]) // Customer invoice data
+            customerInvoiceData = invoiceData.filter(name => name[1].toUpperCase() === customerName) // Customer invoice data
               .map((line, i, arr) => {
 
                 if (i === 0)
@@ -280,10 +281,14 @@ function createSSforSelectedCustomers()
             numRows = customerInvoiceData.length;
             templateSheet = ss.getSheetByName('Template');
             invoiceSheet = ss.insertSheet('Past Invoices', {template: templateSheet}).showSheet();
-            ss.getSheetByName('Export').clear(); // Just incase there is any data left on this page from the template SS
-            ordersSheet = ss.getSheetByName('Submitted Orders');
+            ss.getSheetByName('Export').clear().hideSheet(); // Just incase there is any data left on this page from the template SS
+            ss.getSheetByName('Last Export').clearContents().hideSheet();
+            ss.getSheetByName('Template').hideSheet();
+            ss.getSheetByName('Item List').hideSheet();
+            ss.getSheetByName('Recently Created').hideSheet();
+            ordersSheet = ss.getSheetByName('Submitted Orders').showSheet();
             ordersSheet.getRange(2, 1, ordersSheet.getMaxRows() - 1, ordersSheet.getLastColumn()).clear();
-            //spreadsheet.deleteSheet(ss.getSheetByName('Template'));
+
             horizontalAligns = new Array(numRows).fill(['left', 'right', 'right', 'center', 'center', 'center', 'right', 'right']);
 
             if (numRows > 0)
