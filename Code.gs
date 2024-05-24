@@ -104,10 +104,7 @@ function clearExport()
       Browser.msgBox('You must be on the Export sheet in order to clear it.')
     }
     else
-    {
       exportSheet.clear();
-      MailApp.sendEmail('adrian@pacificnetandtwine.com', 'The Template for Importing into OE has changed!', 'Remember to change the import template from LodgeImport to ShopifyImport next time you use it.') 
-    }
   }
   catch (e)
   {
@@ -329,8 +326,8 @@ function createTriggers_ByPntNoReplyGmail()
     const ssId = SpreadsheetApp.getActive().getId();
     ScriptApp.newTrigger('onChange').forSpreadsheet(ssId).onChange().create();
     ScriptApp.newTrigger('installedOnEdit').forSpreadsheet(ssId).onEdit().create();
-    ScriptApp.newTrigger('updateCustomerSpreadsheets').timeBased().atHour(23).everyDays(1).create();
-    ScriptApp.newTrigger('updateOrderSheet_TEMPLATE').timeBased().atHour(23).everyDays(1).create();
+    ScriptApp.newTrigger('updateCustomerSpreadsheets').timeBased().atHour(10).everyDays(1).create();
+    ScriptApp.newTrigger('updateOrderSheet_TEMPLATE').timeBased().atHour(8).everyDays(1).create();
     ScriptApp.newTrigger('removeUnapprovedEditorsFromCustomerSpreadsheet').timeBased().everyHours(1).create();
     ScriptApp.newTrigger('formatAllCustomerSpreadsheets').timeBased().everyDays(1).atHour(3).create();
   }
@@ -388,26 +385,9 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
             {
               if (isNotBlank(custSS[4])) // The emails are not blank
               {
-                ss = SpreadsheetApp.openByUrl(custSS[3]);
-                emails = custSS[4].split(',').map(email => email.trim());
-                Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
-
-                for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
-                {
-                  try
-                  {
-                    ss.addEditor(emails[email]);
-                    Logger.log('Successfully shared with: ' + emails[email])
-                  }
-                  catch (e)
-                  {
-                    var error = e['stack'];
-                    Logger.log('*Unsuccessful*')
-                    Logger.log(error);
-                  }
-                }
-
-                protectSpreadsheet(ss);
+                [ss, emails] = shareAndProtectSpreadsheet(custSS);
+                Logger.log(ss.getName());
+                Logger.log(emails)
 
                 htmlTemplate.lodgeName = custSS[0];
                 htmlTemplate.pntOrderFormURL = custSS[3];
@@ -849,9 +829,43 @@ function sendErrorEmail(error)
 }
 
 /**
+ * This function adds the editors to the given customer spreadsheet based on the emails listed. If an email fails to share the function still runs.
+ * This function also protects the spreadsheet.
+ * 
+ * @param {String[][]} custSS : Important paramaters pertaining to the customers spreadsheet 
+ * @returns {[Spreadsheet, Strings[]} Returns the customers spreadsheet and all of the emails that the spreadsheet is intended to be shared with
+ * @throws General error if anything goes wrong **Expected Invalid Email error
+ * @author Jarren Ralf
+ */
+function shareAndProtectSpreadsheet(custSS)
+{
+  var ss = SpreadsheetApp.openByUrl(custSS[3]);
+  var emails = custSS[4].split(',').map(email => email.trim());
+  Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
+
+  for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
+  {
+    try
+    {
+      ss.addEditor(emails[email]);
+      Logger.log('Successfully shared with: ' + emails[email])
+    }
+    catch (e)
+    {
+      var error = e['stack'];
+      Logger.log('*Unsuccessful*')
+      Logger.log(error);
+    }
+  }
+
+  protectSpreadsheet(ss);
+
+  return [ss, emails]
+}
+
+/**
  * This function gets the selected cells from the user on the Dashboard and shares the selected spreadsheets with the email addresses provided.
  * 
- * @throws General error if anything goes wrong
  * @author Jarren Ralf
  */
 function shareSpreadsheetsWithSelectedUsers()
@@ -870,8 +884,6 @@ function shareSpreadsheetsWithSelectedUsers()
       Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
     else
     {
-      var ss, emails;
-
       dashboard.getActiveRangeList().getRanges().map(rng => {
         rng.offset(0, 2 - rng.getColumn(), rng.getNumRows(), 7).getValues().map((custSS, i) => {
             if (isNotBlank(custSS[3])) // The URL and emails are not blank
@@ -880,26 +892,7 @@ function shareSpreadsheetsWithSelectedUsers()
               {
                 if (custSS[6])
                 {
-                  ss = SpreadsheetApp.openByUrl(custSS[3]);
-                  emails = custSS[4].split(',').map(email => email.trim());
-                  Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
-
-                  for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
-                  {
-                    try
-                    {
-                      ss.addEditor(emails[email]);
-                      Logger.log('Successfully shared with: ' + emails[email])
-                    }
-                    catch (e)
-                    {
-                      var error = e['stack'];
-                      Logger.log('*Unsuccessful*')
-                      Logger.log(error);
-                    }
-                  }
-
-                  protectSpreadsheet(ss);
+                  shareAndProtectSpreadsheet(custSS)
                   rng.offset(i, 7 - rng.getColumn(), 1, 1).check();
                 }
                 else
@@ -977,7 +970,7 @@ function updateCustomerName(range, value, spreadsheet)
  */
 function updateCustomerSpreadsheets()
 {
-  var splitDescription, newDescription, ss, d, numRows, velocityReportSheet, velocityReportSheetName, horizontalAligns, 
+  var splitDescription, newDescription, ss, d, numRows, velocityReportSheet, velocityReportSheetName, horizontalAligns, startTime,
   customerName, chart, chartTitleInfo, invoiceSheet, customerInvoiceData, itemList = [], colours = [], colourSelector = true;
 
   try
@@ -1021,9 +1014,13 @@ function updateCustomerSpreadsheets()
 
     dashboard.getRange(2, 1, dashboard.getLastRow() - 1, 5).getValues()
       .map(customer => {
+
+        startTime = new Date().getTime() // Reset the function runtime
+
         if (isNotBlank(customer[4]))
         {
           Logger.log('Updating ' + customer[1] + '\'s spreadsheet...')
+
           ss = SpreadsheetApp.openByUrl(customer[4])
           ss.getSheetByName('Item List').hideSheet().getRange(1, 1, numItems).setValues(itemList);
           ss.getSheetByName('Recently Created').hideSheet().getRange(1, 1, numItems).setValues(sortedItems);
@@ -1092,7 +1089,7 @@ function updateCustomerSpreadsheets()
 
           invoiceSheet.getRange(2, 1, numRows, 8).setNumberFormat('@').setBackgrounds(colours).setHorizontalAlignments(horizontalAligns).setValues(customerInvoiceData);
           invoiceSheet.deleteColumn(2).protect();
-          Logger.log(customer[1] + ' spreadsheet update complete.')
+          Logger.log(customer[1] + ' spreadsheet update completed in ' + (new Date().getTime() - startTime)/1000 + ' seconds.')
           Logger.log('------------------------------------------------------------------------------------------------------------------------------------------------------------')
         }
     })
@@ -1135,7 +1132,7 @@ function updateOrderSheet_TEMPLATE()
     const numItems = itemList.length;
     const itemSearchSheet = spreadsheet.getSheetByName('Item Search');
     const ordersSheet = spreadsheet.getSheetByName('Submitted Orders').showSheet();
-    spreadsheet.getSheetByName('Export').clearContents().hideSheet();
+    spreadsheet.getSheetByName('Export').clear().hideSheet();
     spreadsheet.getSheetByName('Last Export').clearContents().hideSheet();
     spreadsheet.getSheetByName('Item List').hideSheet().getRange(1, 1, numItems).setValues(itemList);
     spreadsheet.getSheetByName('Recently Created').hideSheet().getRange(1, 1, numItems).setValues(sortedItems);
