@@ -1,3 +1,4 @@
+
 /**
  * This function handles the on edit events in this spreadsheet. This function is looking for when a user changes information in the Customer name column,
  * or if a checkbox becomes check, signifying that order has been submitted.
@@ -77,7 +78,7 @@ function onOpen()
       .addItem('Email (and Share) Spreadsheets with Selected Customers', 'emailAndShareSpreadsheetsWithSelectedUsers')
       .addItem('Share Spreadsheets with Selected Customers', 'shareSpreadsheetsWithSelectedUsers')
     .addSeparator()
-      .addItem('Create onChange Trigger (with pntnoreply)', 'createTrigger_OnChange_ByPntNoReplyGmail')
+      .addItem('Create Triggers', 'createTriggers_ByPntNoReplyGmail')
     .addSeparator()
       .addItem('Convert Selected Items to Wholesale Pricing', 'convertToWholeSalePricing')
       .addItem('Clear Export', 'clearExport')
@@ -342,7 +343,10 @@ function createTriggers_ByPntNoReplyGmail()
  */
 function deleteTriggers()
 {
-  ScriptApp.getProjectTriggers().map(trigger => ScriptApp.deleteTrigger(trigger))
+  if (Session.getActiveUser().getEmail() !== 'pntnoreply@gmail.com')
+    Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
+  else
+    ScriptApp.getProjectTriggers().map(trigger => ScriptApp.deleteTrigger(trigger))
 }
 
 /**
@@ -364,6 +368,8 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
       spreadsheet.getSheetByName('Dashboard').activate();
       Browser.msgBox('Please return to the Dashboard to run this function.')
     }
+    else if (Session.getActiveUser().getEmail() !== 'pntnoreply@gmail.com')
+      Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
     else
     {
       const files = DriveApp.getFolderById('1oHuZbunXp4RcvKTi7IOVDy9-bfxcwf-y').getFiles(); // The inline gif images for the instructional email
@@ -378,46 +384,54 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
       
       dashboard.getActiveRangeList().getRanges().map(rng => {
         rng.offset(0, 2 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((custSS, i) => {
-            if (isNotBlank(custSS[3]) && isNotBlank(custSS[4])) // The URL and emails are not blank
+            if (isNotBlank(custSS[3])) // The URL is not blank
             {
-              ss = SpreadsheetApp.openByUrl(custSS[3]);
-              emails = custSS[4].split(',').map(email => email.trim());
-              Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
-
-              for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
+              if (isNotBlank(custSS[4])) // The emails are not blank
               {
-                try
+                ss = SpreadsheetApp.openByUrl(custSS[3]);
+                emails = custSS[4].split(',').map(email => email.trim());
+                Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
+
+                for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
                 {
-                  ss.addEditor(emails[email]);
-                  Logger.log('Successfully shared with: ' + emails[email])
+                  try
+                  {
+                    ss.addEditor(emails[email]);
+                    Logger.log('Successfully shared with: ' + emails[email])
+                  }
+                  catch (e)
+                  {
+                    var error = e['stack'];
+                    Logger.log('*Unsuccessful*')
+                    Logger.log(error);
+                  }
                 }
-                catch (e)
-                {
-                  var error = e['stack'];
-                  Logger.log('*Unsuccessful*')
-                  Logger.log(error);
-                }
+
+                protectSpreadsheet(ss);
+
+                htmlTemplate.lodgeName = custSS[0];
+                htmlTemplate.pntOrderFormURL = custSS[3];
+                htmlTemplate.invoiceDataURL = custSS[3] + '#gid=' + ss.getSheetByName('Past Invoices').getSheetId();
+                htmlTemplate.velocityReportURL = custSS[3] + '#gid=' + ss.getSheetByName('Yearly Purchase Report').getSheetId();
+                htmlTemplate.createGoogleAccountURL = "https://support.google.com/accounts/answer/27441?hl=en";
+
+                MailApp.sendEmail({
+                  to: emails.join(","),
+                  replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
+                  name: "Jarren Ralf",
+                  subject: "Pacific Net & Twine (PNT) Order Form",
+                  htmlBody: htmlTemplate.evaluate().getContent(),
+                  inlineImages: emailImages
+                });
+
+                spreadsheet.toast('The instructional email has been sent to ' + custSS[0], 'Email Sent')
+                rng.offset(i, 7 - rng.getColumn(), 1, 2).check();
               }
-
-              protectSpreadsheet(ss);
-
-              htmlTemplate.lodgeName = custSS[0];
-              htmlTemplate.pntOrderFormURL = custSS[3];
-              htmlTemplate.invoiceDataURL = custSS[3] + '#gid=' + ss.getSheetByName('Past Invoices').getSheetId();
-              htmlTemplate.velocityReportURL = custSS[3] + '#gid=' + ss.getSheetByName('Yearly Purchase Report').getSheetId();
-              htmlTemplate.createGoogleAccountURL = "https://support.google.com/accounts/answer/27441?hl=en";
-
-              MailApp.sendEmail({
-                to: emails.join(","),
-                name: "Jarren Ralf",
-                subject: "Pacific Net & Twine (PNT) Order Form",
-                htmlBody: htmlTemplate.evaluate().getContent(),
-                inlineImages: emailImages
-              });
-
-              spreadsheet.toast('The instructional email has been sent to ' + custSS[0], 'Email Sent')
-              rng.offset(i, 7 - rng.getColumn(), 1, 2).check();
+              else
+                spreadsheet.toast('Add customer emails for ' + custSS[0] + ' before sending instructional email.', 'Add Emails', -1);
             }
+            else
+              spreadsheet.toast('First create a spreadsheet for ' + custSS[0] + ' before sending instructional email.', 'Create Spreadsheet', -1);
           })
       })
     }
@@ -440,7 +454,7 @@ function formatAllCustomerSpreadsheets()
 {
   const dashboard = SpreadsheetApp.getActive().getSheetByName('Dashboard');
   const dayOfWeek = new Date().getDay();
-  var itemSearchSheet, maxRows, startTime;
+  var itemSearchSheet, customerName, maxRows, startTime;
 
   try
   {
@@ -451,6 +465,9 @@ function formatAllCustomerSpreadsheets()
       if (i % 6 === dayOfWeek && isNotBlank(custSS[0])) // If spreadsheet URL is not blank, and use the day of the week (Sun - Sat => 0 - 6) in order to decide which spreadsheets to format
       {
         itemSearchSheet = SpreadsheetApp.openByUrl(custSS[0]).getSheetByName('Item Search');
+        customerName = itemSearchSheet.getSheetValues(1, 2, 1, 1)[0][0];
+        Logger.log('Formatting ' + customerName + '\'s spreadsheet...')
+
         maxRows = itemSearchSheet.getMaxRows() - 4;
 
         itemSearchSheet.getRange(5, 1, maxRows, itemSearchSheet.getMaxColumns()).setBorder(false, false, false, false, false, false) // The full range below the header
@@ -503,7 +520,8 @@ function formatAllCustomerSpreadsheets()
             .setVerticalAlignment('middle')
             .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
 
-        Logger.log(itemSearchSheet.getSheetValues(1, 2, 1, 1)[0][0] + '\'s spreadsheet has been successfully formatted in ' + (new Date().getTime() - startTime)/1000 + ' seconds.')
+        Logger.log(customerName + '\'s spreadsheet has been successfully formatted in ' + (new Date().getTime() - startTime)/1000 + ' seconds.');
+        Logger.log('------------------------------------------------------------------------------------------------------------------------------------------------------------');
       }
     })
   }
@@ -652,22 +670,13 @@ function protectSpreadsheet(ss)
 {
   // Since the number of items change, we need to adjust some of the protected and unprotected ranges
   var unprotectedRanges, lastRow = ss.getSheetByName('Item List').getLastRow();
-  Logger.log(lastRow);
-  Logger.log(ss.getName());
-  Logger.log(ss.getProtections(SpreadsheetApp.ProtectionType.SHEET));
 
   ss.getProtections(SpreadsheetApp.ProtectionType.SHEET).map(protection => {
-    Logger.log(protection.getDescription());
     unprotectedRanges = protection.getUnprotectedRanges();
-    Logger.log(unprotectedRanges);
 
     if (unprotectedRanges.length > 0)
-    {
-      Logger.log(unprotectedRanges.getA1Notation());
       protection.setUnprotectedRanges(unprotectedRanges.map(range => (range.getLastRow() > 5) ? range.offset(0, 0, lastRow, range.getNumColumns()) : range));
-    }
       
-
     protection.removeEditors(protection.getEditors());
     protection.addEditor('pntnoreply@gmail.com');
   });
@@ -857,36 +866,50 @@ function shareSpreadsheetsWithSelectedUsers()
       spreadsheet.getSheetByName('Dashboard').activate();
       Browser.msgBox('Please return to the Dashboard to run this function.')
     }
+    else if (Session.getActiveUser().getEmail() !== 'pntnoreply@gmail.com')
+      Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
     else
     {
       var ss, emails;
 
       dashboard.getActiveRangeList().getRanges().map(rng => {
-        rng.offset(0, 2 - rng.getColumn(), rng.getNumRows(), 5).getValues().map((custSS, i) => {
-            if (isNotBlank(custSS[3]) && isNotBlank(custSS[4]))
+        rng.offset(0, 2 - rng.getColumn(), rng.getNumRows(), 7).getValues().map((custSS, i) => {
+            if (isNotBlank(custSS[3])) // The URL and emails are not blank
             {
-              ss = SpreadsheetApp.openByUrl(custSS[3]);
-              emails = custSS[4].split(',').map(email => email.trim())
-              Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
-
-              for (var i = 0; i < emails.length; i++) // Loop through all of the employee emails and share with them individually to avoid errors
+              if (isNotBlank(custSS[4]))
               {
-                try
+                if (custSS[6])
                 {
-                  ss.addEditor(emails[i]);
-                  Logger.log('Successfully shared with: ' + emails[i])
-                }
-                catch (e)
-                {
-                  var error = e['stack'];
-                  Logger.log('*Unsuccessful*')
-                  Logger.log(error);
-                }
-              }
+                  ss = SpreadsheetApp.openByUrl(custSS[3]);
+                  emails = custSS[4].split(',').map(email => email.trim());
+                  Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
 
-              protectSpreadsheet(ss);
-              rng.offset(i, 7 - rng.getColumn(), 1, 1).check()
+                  for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
+                  {
+                    try
+                    {
+                      ss.addEditor(emails[email]);
+                      Logger.log('Successfully shared with: ' + emails[email])
+                    }
+                    catch (e)
+                    {
+                      var error = e['stack'];
+                      Logger.log('*Unsuccessful*')
+                      Logger.log(error);
+                    }
+                  }
+
+                  protectSpreadsheet(ss);
+                  rng.offset(i, 7 - rng.getColumn(), 1, 1).check();
+                }
+                else
+                  spreadsheet.toast('Send instructional email for ' + custSS[0] + ' before sharing the PNT Order Form.', 'Send Instructional Email', -1);
+              }
+              else
+                spreadsheet.toast('Add customer emails for ' + custSS[0] + ' before sharing the PNT Order Form.', 'Add Emails', -1);
             }
+            else
+              spreadsheet.toast('First create a spreadsheet for ' + custSS[0] + ' before sharing the PNT Order Form.', 'Create Spreadsheet', -1);
           })
       })
     }
@@ -1111,7 +1134,7 @@ function updateOrderSheet_TEMPLATE()
     sortedItems.shift();
     const numItems = itemList.length;
     const itemSearchSheet = spreadsheet.getSheetByName('Item Search');
-    const ordersSheet = ss.getSheetByName('Submitted Orders').showSheet();
+    const ordersSheet = spreadsheet.getSheetByName('Submitted Orders').showSheet();
     spreadsheet.getSheetByName('Export').clearContents().hideSheet();
     spreadsheet.getSheetByName('Last Export').clearContents().hideSheet();
     spreadsheet.getSheetByName('Item List').hideSheet().getRange(1, 1, numItems).setValues(itemList);
