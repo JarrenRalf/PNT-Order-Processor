@@ -49,7 +49,7 @@ function onChange(e)
       const dashboard = e.source.getSheetByName('Dashboard')
       
       const customerInfo = dashboard.getSheetValues(2, 2, dashboard.getLastRow() - 1, 4).map(date => {
-        date[2] = (Number(date[2]) !== 0) ? Math.abs(Number(date[2]) - today) < 5000 : '';
+        date[2] = (Number(date[2]) !== 0) ? Math.abs(Number(date[2]) - today) < 10000 : '';
         return date;
       });
 
@@ -520,99 +520,108 @@ function formatAllCustomerSpreadsheets()
  */
 function getExportData()
 {
-  const spreadsheet = SpreadsheetApp.getActive();
-  const dashboard = spreadsheet.getActiveSheet();
-
-  try
+  if (Session.getActiveUser().getEmail() !== 'pntnoreply@gmail.com')
+    Browser.msgBox('This function can only be run by the pntnoreply@gmail account.');
+  else
   {
-    if (dashboard.getSheetName() !== 'Dashboard')
+    const spreadsheet = SpreadsheetApp.getActive();
+    const dashboard = spreadsheet.getActiveSheet();
+
+    try
     {
-      spreadsheet.getSheetByName('Dashboard').activate();
-      Browser.msgBox('Please return to the Dashboard to run this function.')
+      if (dashboard.getSheetName() !== 'Dashboard')
+      {
+        spreadsheet.getSheetByName('Dashboard').activate();
+        Browser.msgBox('Please return to the Dashboard to run this function.')
+      }
+      else
+      {
+        var exportRange, itemPricing, exportData_WithDiscountedPrices = [];
+        const numSS = dashboard.getLastRow() - 1;
+        const dashboardRange = dashboard.getRange(2, 1, numSS, 5);
+
+        const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages')
+        const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
+        const BASE_PRICE = 1;
+        var PRICE, index;
+
+        dashboardRange.getValues().map((customer, c) => {
+          if (dashboard.getRange(c + 2, 3).isChecked())
+          {
+            PRICE = (customer[0] !== 'DL1015') ? 3 : 4;
+            Logger.log('Getting pricing for ' + customer[1])
+            Logger.log((PRICE !== 4) ? 'Discount Structure Type: Lodge' : 'Discount Structure Type: Wholesale');
+            Logger.log('------------------------------------------------------------------------------------------------------------------------------------------------------------')
+
+            exportRange = SpreadsheetApp.openByUrl(customer[4]).getSheetByName('Export').getDataRange();
+
+            exportRange.getValues().map(item => {
+              if (item[0] === 'H') // Header line
+                exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
+              else if (item[0] === 'I') // Comment line
+                exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
+              else if (item[0] === 'D') // Detail line
+              {
+                itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
+
+                if (itemPricing == undefined) // SKU is assumed to be invalid
+                  exportData_WithDiscountedPrices.push(['D', 'MISCITEM', 0, item[3]], ['C', 'SKU Not Found: ' + item[1] + ' therefore it was replaced with MISCITEM', '', ''])
+                else // SKU is assumed to be valid
+                {
+                  if (itemPricing[BASE_PRICE] != 0 && itemPricing[PRICE] != 0)
+                    item[2] = (itemPricing[BASE_PRICE]*(100 - itemPricing[PRICE])/100).toFixed(2); // Set the pricing
+
+                  exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
+                }
+              }
+              else if (item[0] === 'C') // Comment line
+              {
+                if (item[1].split('Description: ').length === 2)
+                {
+                  index = 1;
+
+                  while (exportData_WithDiscountedPrices[exportData_WithDiscountedPrices.length - index][0] === 'C')
+                    index++;
+
+                  if (exportData_WithDiscountedPrices[exportData_WithDiscountedPrices.length - index][1] === 'MISCITEM')
+                    exportData_WithDiscountedPrices.push(['C', item[1], '', '']) // Only keep the Description comment if the item is a MISCITEM
+                }
+                else
+                  exportData_WithDiscountedPrices.push(['C', item[1], '', ''])
+              }
+            })
+
+            exportRange.clear();
+            dashboard.getRange(c + 2, 3).uncheck();
+            SpreadsheetApp.flush();
+            spreadsheet.toast(customer[1] + '\'s export page has been cleared.')
+          }
+        })
+
+        const exportSheet = spreadsheet.getSheetByName('Export').clear();
+        const ranges = [[],[],[]];
+        const backgroundColours = [
+          '#c9daf8', // Make the header rows blue
+          '#fcefe1', // Make the comment rows orange
+          '#e0d5fd'  // Make the instruction comment rows purple
+        ];
+
+        exportData_WithDiscountedPrices.map((h, r) => 
+          h = (h[0] !== 'H') ? (h[0] !== 'C') ? (h[0] !== 'I') ? false : 
+          ranges[2].push('A' + (r + 1) + ':D' + (r + 1)) : // Instruction comment rows purple
+          ranges[1].push('A' + (r + 1) + ':D' + (r + 1)) : // Comment rows orange
+          ranges[0].push('A' + (r + 1) + ':D' + (r + 1))   // Header rows blue
+        )
+
+        ranges.map((rngs, r) => (rngs.length !== 0) ? exportSheet.getRangeList(rngs).setBackground(backgroundColours[r]) : false); // Set the appropriate background colours
+        exportSheet.getRange(1, 1, exportData_WithDiscountedPrices.length, 4).setNumberFormat('@').setValues(exportData_WithDiscountedPrices).activate();
+      }
     }
-    else
+    catch (e)
     {
-      var exportRange, itemPricing, exportData_WithDiscountedPrices = [];
-      const numSS = dashboard.getLastRow() - 1;
-      const dashboardRange = dashboard.getRange(2, 1, numSS, 5);
-
-      const discountSheet = SpreadsheetApp.openById('1gXQ7uKEYPtyvFGZVmlcbaY6n6QicPBhnCBxk-xqwcFs').getSheetByName('Discount Percentages')
-      const discounts = discountSheet.getSheetValues(2, 11, discountSheet.getLastRow() - 1, 5);
-      const BASE_PRICE = 1;
-      var PRICE, index;
-
-      dashboardRange.getValues().map((customer, c) => {
-        if (dashboard.getRange(c + 2, 3).isChecked())
-        {
-          PRICE = (customer[0] !== 'DL1015') ? 4 : 3;
-          exportRange = SpreadsheetApp.openByUrl(customer[4]).getSheetByName('Export').getDataRange();
-
-          exportRange.getValues().map(item => {
-            if (item[0] === 'H') // Header line
-              exportData_WithDiscountedPrices.push(['H', item[1], item[2], item[3]])
-            else if (item[0] === 'I') // Comment line
-              exportData_WithDiscountedPrices.push(['I', item[1], '', ''])
-            else if (item[0] === 'D') // Detail line
-            {
-              itemPricing = discounts.find(sku => sku[0].split(' - ').pop().toString().toUpperCase() === item[1]); // Find the item pricing on the discount sheet
-
-              if (itemPricing == undefined) // SKU is assumed to be invalid
-                exportData_WithDiscountedPrices.push(['D', 'MISCITEM', 0, item[3]], ['C', 'SKU Not Found: ' + item[1] + ' therefore it was replaced with MISCITEM', '', ''])
-              else // SKU is assumed to be valid
-              {
-                if (itemPricing[BASE_PRICE] != 0 && itemPricing[PRICE] != 0)
-                  item[2] = (itemPricing[BASE_PRICE]*(100 - itemPricing[PRICE])/100).toFixed(2); // Set the pricing
-
-                exportData_WithDiscountedPrices.push(['D', item[1], item[2], item[3]])
-              }
-            }
-            else if (item[0] === 'C') // Comment line
-            {
-              if (item[1].split('Description: ').length === 2)
-              {
-                index = 1;
-
-                while (exportData_WithDiscountedPrices[exportData_WithDiscountedPrices.length - index][0] === 'C')
-                  index++;
-
-                if (exportData_WithDiscountedPrices[exportData_WithDiscountedPrices.length - index][1] === 'MISCITEM')
-                  exportData_WithDiscountedPrices.push(['C', item[1], '', '']) // Only keep the Description comment if the item is a MISCITEM
-              }
-              else
-                exportData_WithDiscountedPrices.push(['C', item[1], '', ''])
-            }
-          })
-
-          exportRange.clear();
-          dashboard.getRange(c + 2, 3).uncheck();
-          SpreadsheetApp.flush();
-          spreadsheet.toast(customer[1] + '\'s export page has been cleared.')
-        }
-      })
-
-      const exportSheet = spreadsheet.getSheetByName('Export').clear();
-      const ranges = [[],[],[]];
-      const backgroundColours = [
-        '#c9daf8', // Make the header rows blue
-        '#fcefe1', // Make the comment rows orange
-        '#e0d5fd'  // Make the instruction comment rows purple
-      ];
-
-      exportData_WithDiscountedPrices.map((h, r) => 
-        h = (h[0] !== 'H') ? (h[0] !== 'C') ? (h[0] !== 'I') ? false : 
-        ranges[2].push('A' + (r + 1) + ':D' + (r + 1)) : // Instruction comment rows purple
-        ranges[1].push('A' + (r + 1) + ':D' + (r + 1)) : // Comment rows orange
-        ranges[0].push('A' + (r + 1) + ':D' + (r + 1))   // Header rows blue
-      )
-
-      ranges.map((rngs, r) => (rngs.length !== 0) ? exportSheet.getRangeList(rngs).setBackground(backgroundColours[r]) : false); // Set the appropriate background colours
-      exportSheet.getRange(1, 1, exportData_WithDiscountedPrices.length, 4).setNumberFormat('@').setValues(exportData_WithDiscountedPrices).activate();
+      var error = e['stack'];
+      throw new Error(error);
     }
-  }
-  catch (e)
-  {
-    var error = e['stack'];
-    throw new Error(error);
   }
 }
 
