@@ -56,8 +56,10 @@ function onChange(e)
       for (var i = 0; i < customerInfo.length; i++)
         if (customerInfo[i][2]) // Check if the change has been made in the last 5 seconds
         {
+          Logger.log(customerInfo[i][0] + ' has submitted an order... preparing to send email to customer...')
           dashboard.getRange(i + 2, 3).check(); // Check the checkbox to indicate that the user has an outstanding (unimported) order
           sendConfirmationEmail(customerInfo[i][0], customerInfo[i][3]);
+          Logger.log('Email successfully sent to ' + customerInfo[i][0]);
         }
     }
   }
