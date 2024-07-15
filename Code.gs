@@ -706,7 +706,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
           drawings[1].button.setOnAction((drawings[1].x < drawings[0].x && drawings[1].w < drawings[0].w) ? 'allItems' : 'addSelectedItemsToOrder');
 
         approvedEditors = ['pntnoreply@gmail.com'];
-        approvedEditors.push(...custSS[4].split(',').map(email => email.trim())); // Get the list of approved editors and add it to pntnoreply@gmail.com
+        approvedEditors.push(...custSS[4].split(',').map(email => email.trim()).toLowerCase()); // Get the list of approved editors and add it to pntnoreply@gmail.com
 
         Logger.log(custSS[0] + ' approved editors:')
         Logger.log(approvedEditors)
@@ -727,7 +727,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
         }
 
         currentEditors = ss.getEditors().map(user => {
-          email = user.getEmail();
+          email = user.getEmail().toLowerCase();
 
           if (!approvedEditors.includes(email)) // If an editor is not on the approved email list, then remove them
           {
@@ -851,7 +851,7 @@ function sendErrorEmail(error)
 function shareAndProtectSpreadsheet(custSS)
 {
   var ss = SpreadsheetApp.openByUrl(custSS[3]);
-  var emails = custSS[4].split(',').map(email => email.trim());
+  var emails = custSS[4].split(',').map(email => email.trim()).toLowerCase();
   Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
 
   for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
