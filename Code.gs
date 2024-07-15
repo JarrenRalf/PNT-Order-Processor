@@ -693,6 +693,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
       if (isNotBlank(custSS[3]) && custSS[6]) // Spreadsheet URL is not blank and that the customer has already received their instructional email
       {
         ss = SpreadsheetApp.openByUrl(custSS[3]).addEditor('pntnoreply@gmail.com'); // Make sure pntnoreply@gmail.com is an editor
+        DriveApp.getFileById(ss.getId()).setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.EDIT); // Turn off the possibility of users set the sharing to "Anyone with a Link"
 
         // These are the drawings that are used as buttons for the users
         drawings = ss.getSheetByName('Item Search').getDrawings().map(drawing => {
@@ -736,6 +737,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
           }
             
         });
+
 
         protectSpreadsheet(ss);
         dashboard.getRange(2 + i, 7).check(); // Check the box that signals if the spreadsheet is appropriately shared with the relevant emails
