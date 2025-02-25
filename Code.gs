@@ -18,10 +18,12 @@ function installedOnEdit(e)
   try
   {
     if (sheetName === 'Dashboard' && row > 1)
+    {
       if (col === 2) // Changing or adding a customer's name
         updateCustomerName(range, value, spreadsheet);
       else if (col === 6) // Changing or adding a customer's email
         updateSharedStatusOfCustomerSS(range);
+    } 
     else if (sheetName === 'Export' && col === 3) // The user may be editting the pricing
       updatePrice(e, range, value)
   }
@@ -399,7 +401,7 @@ function emailAndShareSpreadsheetsWithSelectedUsers()
 
                 MailApp.sendEmail({
                   to: emails.join(","),
-                  replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
+                  replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, jarren@pacificnetandtwine.com",
                   name: "Jarren Ralf",
                   subject: "Pacific Net & Twine (PNT) Order Form",
                   htmlBody: htmlTemplate.evaluate().getContent(),
@@ -605,7 +607,7 @@ function getExportData()
         const backgroundColours = [
           '#c9daf8', // Make the header rows blue
           '#fcefe1', // Make the comment rows orange
-          '#e0d5fd'  // Make the instruction comment rows purple
+          '#e0d5fd' // Make the instruction comment rows purple
         ];
 
         exportData_WithDiscountedPrices.map((h, r) => 
@@ -707,7 +709,7 @@ function removeUnapprovedEditorsFromCustomerSpreadsheet()
           drawings[1].button.setOnAction((drawings[1].x < drawings[0].x && drawings[1].w < drawings[0].w) ? 'allItems' : 'addSelectedItemsToOrder');
 
         approvedEditors = ['pntnoreply@gmail.com'];
-        approvedEditors.push(...custSS[4].split(',').map(email => email.trim()).toLowerCase()); // Get the list of approved editors and add it to pntnoreply@gmail.com
+        approvedEditors.push(...custSS[4].split(',').map(email => email.trim().toLowerCase())); // Get the list of approved editors and add it to pntnoreply@gmail.com
 
         Logger.log(custSS[0] + ' approved editors:')
         Logger.log(approvedEditors)
@@ -792,7 +794,7 @@ function sendConfirmationEmail(name, ssUrl)
 
   // Send an email to the PNT employees with the new order
   MailApp.sendEmail({
-    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
+    to: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, jarren@pacificnetandtwine.com",
     replyTo: customerEmails,
     name: 'PNT Sales',
     subject: (isPoNotBlank) ? name + " has placed an order, PO # " + orderInfo[3] : name + " has placed an order!",
@@ -807,7 +809,7 @@ function sendConfirmationEmail(name, ssUrl)
   // Send an email confirmation to the customer
   MailApp.sendEmail({
     to: customerEmails, // Send a confirmation to all of the editors, except me
-    replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, eryn@pacificnetandtwine.com, triteswarehouse@pacificnetandtwine.com",
+    replyTo: "deryk@pacificnetandtwine.com, scottnakashima@hotmail.com, jarren@pacificnetandtwine.com",
     name: 'PNT Sales',
     subject: (isPoNotBlank) ? "Order Confirmation for PO # " + orderInfo[3] : "Order Confirmation",
     htmlBody: body
@@ -853,7 +855,7 @@ function sendErrorEmail(error)
 function shareAndProtectSpreadsheet(custSS)
 {
   var ss = SpreadsheetApp.openByUrl(custSS[3]);
-  var emails = custSS[4].split(',').map(email => email.trim()).toLowerCase();
+  var emails = custSS[4].split(',').map(email => email.trim().toLowerCase());
   Logger.log('Sharing spreadsheet with ' + custSS[0] + ' employee emails:')
 
   for (var email = 0; email < emails.length; email++) // Loop through all of the employee emails and share with them individually to avoid errors
